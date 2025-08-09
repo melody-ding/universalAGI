@@ -1,0 +1,10 @@
+node_modules
+npm-debug.log*
+.next
+.nuxt
+dist
+.cache
+.parcel-cache
+.DS_Store
+*.tsbuildinfo
+.env*.local

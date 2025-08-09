@@ -78,16 +78,6 @@ export function ThinkingSteps({ steps, isThinking, isComplete }: ThinkingStepsPr
               </div>
             ))}
             
-            {isThinking && !isComplete && (
-              <div className="flex items-start gap-3 p-2 rounded-lg bg-white/60 dark:bg-gray-800/40 border border-blue-100 dark:border-blue-900">
-                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
-                  <Loader2 className="h-3 w-3 animate-spin text-blue-700 dark:text-blue-300" />
-                </div>
-                <div className="flex-1 text-sm text-gray-500 dark:text-gray-400 italic">
-                  Thinking...
-                </div>
-              </div>
-            )}
           </div>
           
           {steps.length > 0 && (
@@ -97,7 +87,7 @@ export function ThinkingSteps({ steps, isThinking, isComplete }: ThinkingStepsPr
                 <span>
                   {isComplete 
                     ? `Completed ${steps.length} reasoning steps`
-                    : `Step ${Math.max(...steps.map(s => s.step))} of ${steps[0]?.total_steps || '?'}`}
+                    : `Step ${Math.max(...steps.map(s => s.step))} of ${Math.max(...steps.map(s => s.total_steps), steps[0]?.total_steps || 0)}`}
                 </span>
               </div>
             </div>

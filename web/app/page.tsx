@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent } from "@/components/ui/card";
 import { ThinkingSteps } from "@/components/ThinkingSteps";
+import { MarkdownMessage } from "@/components/MarkdownMessage";
 
 interface ThinkingStep {
   content: string;
@@ -247,7 +248,13 @@ export default function Home() {
                         : "text-muted-foreground"
                     }`}
                   >
-                    {message.text || (message.isThinking ? "Thinking..." : "")}
+                    {message.sender === "bot" ? (
+                      <MarkdownMessage 
+                        content={message.text || (message.isThinking ? "Thinking..." : "")}
+                      />
+                    ) : (
+                      message.text || (message.isThinking ? "Thinking..." : "")
+                    )}
                   </CardContent>
                 </Card>
               </div>
