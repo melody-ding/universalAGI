@@ -148,35 +148,16 @@ class ReActAgent:
                 step_counter += 1
                 return step_counter
             
-            # Phase 1: Planning
-            yield StreamingEvent(
-                "thinking_step",
-                "🎯 PLANNING: Analyzing your request and creating execution plan...",
-                {"step": next_step(), "total_steps": 8}
-            )
-            
+            # Phase 1: Planning (internal, no UI output)
             plan = await self.planner.create_plan(user_message, has_image, context)
-            
-            yield StreamingEvent(
-                "thinking_step", 
-                f"📋 PLAN: {plan.objective}",
-                {"step": next_step(), "total_steps": len(plan.steps) + 5, "plan": plan.to_dict()}
-            )
-            
-            # Phase 2: Execution
-            yield StreamingEvent(
-                "thinking_step",
-                "⚙️ EXECUTION: Starting to carry out the plan...",
-                {"step": next_step(), "total_steps": len(plan.steps) + 5}
-            )
             
             execution_results = []
             
             for i, step in enumerate(plan.steps):
                 yield StreamingEvent(
                     "thinking_step",
-                    f"STEP {i+1}: {step.action}",
-                    {"step": next_step(), "total_steps": len(plan.steps) + 5}
+                    step.action,
+                    {"step": next_step(), "total_steps": len(plan.steps)}
                 )
                 
                 try:
@@ -187,7 +168,7 @@ class ReActAgent:
                     yield StreamingEvent(
                         "thinking_step",
                         f"⚠ ERROR: {str(e)[:100]}...",
-                        {"step": next_step(), "total_steps": len(plan.steps) + 5}
+                        {"step": next_step(), "total_steps": len(plan.steps)}
                     )
             
             # Phase 3: Completion

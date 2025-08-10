@@ -65,9 +65,8 @@ export function ThinkingSteps({ steps = [], isThinking = false, isComplete = fal
           <div className="space-y-2">
             {steps.filter(step => step && typeof step === 'object').map((step, index) => (
               <div
-                key={`step-${step.step || index}`}
-                className="flex items-start gap-3 p-2 rounded-lg bg-white/60 dark:bg-gray-800/40 border border-blue-100 dark:border-blue-900 animate-in slide-in-from-left duration-300"
-                style={{ animationDelay: `${index * 100}ms` }}
+                key={`step-${index}-${step.step || index}-${step.content?.slice(0, 20) || ''}`}
+                className="flex items-start gap-3 p-2 rounded-lg bg-white/60 dark:bg-gray-800/40 border border-blue-100 dark:border-blue-900"
               >
                 <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-xs font-medium text-blue-700 dark:text-blue-300">
                   {step.step || index + 1}
@@ -87,7 +86,13 @@ export function ThinkingSteps({ steps = [], isThinking = false, isComplete = fal
                 <span>
                   {isComplete 
                     ? `Completed ${steps.length} reasoning steps`
-                    : `Step ${Math.max(...steps.filter(s => s?.step).map(s => s.step), 0)} of ${Math.max(...steps.filter(s => s?.total_steps).map(s => s.total_steps), steps[0]?.total_steps || 0)}`}
+                    : (() => {
+                        const validSteps = steps.filter(s => s?.step);
+                        const validTotalSteps = steps.filter(s => s?.total_steps);
+                        const currentStep = validSteps.length > 0 ? Math.max(...validSteps.map(s => s.step)) : 0;
+                        const totalSteps = validTotalSteps.length > 0 ? Math.max(...validTotalSteps.map(s => s.total_steps)) : (steps[0]?.total_steps || 0);
+                        return `Step ${currentStep} of ${totalSteps}`;
+                      })()}
                 </span>
               </div>
             </div>
