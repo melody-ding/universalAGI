@@ -391,8 +391,8 @@ export default function DocumentDetailPage() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-6 bg-gray-50">
-        <div className="max-w-4xl mx-auto space-y-6">
+      <div className="flex-1 overflow-auto p-6 bg-white">
+        <div className="max-w-6xl mx-auto space-y-6">
           
           {/* Document Information Card */}
           <Card>
@@ -450,7 +450,7 @@ export default function DocumentDetailPage() {
               <CardTitle>Document Preview</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="w-full h-96 border rounded-lg overflow-hidden bg-gray-50">
+              <div className="w-full h-[600px] border rounded-lg overflow-hidden bg-gray-50">
                 {viewerLoading ? (
                   <div className="flex items-center justify-center h-full">
                     <div className="text-center">
