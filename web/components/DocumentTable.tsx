@@ -2,7 +2,7 @@
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileText, Download, Eye } from "lucide-react";
+import { FileText, Download, Eye, Trash2 } from "lucide-react";
 
 interface UploadedDocument {
   id: number;
@@ -16,6 +16,7 @@ interface DocumentTableProps {
   documents: UploadedDocument[];
   onView?: (document: UploadedDocument) => void;
   onDownload?: (document: UploadedDocument) => void;
+  onDelete?: (document: UploadedDocument) => void;
   className?: string;
 }
 
@@ -23,6 +24,7 @@ export function DocumentTable({
   documents, 
   onView, 
   onDownload, 
+  onDelete,
   className = "" 
 }: DocumentTableProps) {
   if (documents.length === 0) {
@@ -92,6 +94,14 @@ export function DocumentTable({
                           onClick={() => onDownload?.(doc)}
                         >
                           <Download className="w-4 h-4" />
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => onDelete?.(doc)}
+                          className="text-red-600 hover:text-red-700 hover:border-red-300"
+                        >
+                          <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
                     </td>

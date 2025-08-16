@@ -80,5 +80,29 @@ class S3Client:
             return url
         except ClientError as e:
             raise Exception(f"Failed to generate presigned URL: {str(e)}")
+    
+    def delete_file_by_hash(self, doc_hash: str) -> bool:
+        """Delete all files associated with a document hash from S3."""
+        try:
+            # List all objects with the hash prefix
+            response = self.s3_client.list_objects_v2(
+                Bucket=self.bucket_name,
+                Prefix=f"{doc_hash}/"
+            )
+            
+            if response.get('KeyCount', 0) == 0:
+                return True  # No files to delete
+            
+            # Delete all objects
+            objects_to_delete = [{'Key': obj['Key']} for obj in response['Contents']]
+            
+            self.s3_client.delete_objects(
+                Bucket=self.bucket_name,
+                Delete={'Objects': objects_to_delete}
+            )
+            
+            return True
+        except ClientError as e:
+            raise Exception(f"Failed to delete files from S3: {str(e)}")
 
 s3_client = S3Client()

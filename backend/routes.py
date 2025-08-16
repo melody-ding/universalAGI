@@ -129,3 +129,29 @@ async def get_documents():
     except Exception as e:
         logger.error(f"Error fetching documents: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error fetching documents: {str(e)}")
+
+@router.delete("/documents/{document_id}")
+async def delete_document(document_id: int):
+    try:
+        from database.postgres_client import postgres_client
+        
+        # Check if document exists
+        doc_response = postgres_client.execute_statement(
+            "SELECT id FROM documents WHERE id = :document_id",
+            [{'name': 'document_id', 'value': {'longValue': document_id}}]
+        )
+        
+        if not doc_response['records']:
+            raise HTTPException(status_code=404, detail=f"Document with ID {document_id} not found")
+        
+        # Delete the document and all related data
+        postgres_client.delete_document_and_segments(document_id, include_s3_cleanup=True)
+        
+        logger.info(f"Successfully deleted document {document_id}")
+        return {"message": f"Document {document_id} deleted successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting document {document_id}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error deleting document: {str(e)}")

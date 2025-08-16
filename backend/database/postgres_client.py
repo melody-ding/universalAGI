@@ -143,9 +143,19 @@ class PostgresClient:
         
         return response['records'][0][0]['longValue']
     
-    def delete_document_and_segments(self, document_id: int):
-        """Delete a document and all its segments."""
-        logger.info(f"Deleting document {document_id} and its segments")
+    def delete_document_and_segments(self, document_id: int, include_s3_cleanup: bool = True):
+        """Delete a document and all its segments from database and optionally S3."""
+        logger.info(f"Deleting document {document_id} and its segments (S3 cleanup: {include_s3_cleanup})")
+        
+        # Get document info for S3 deletion if needed
+        document_checksum = None
+        if include_s3_cleanup:
+            doc_response = self.execute_statement(
+                "SELECT checksum FROM documents WHERE id = :document_id",
+                [{'name': 'document_id', 'value': {'longValue': document_id}}]
+            )
+            if doc_response['records']:
+                document_checksum = doc_response['records'][0][0].get('stringValue')
         
         # Delete segments first (due to foreign key constraint)
         parameters = [
@@ -166,6 +176,15 @@ class PostgresClient:
                 parameters
             )
             logger.info(f"Deleted document {document_id}")
+            
+            # Delete from S3 if requested and we have the checksum
+            if include_s3_cleanup and document_checksum:
+                from database.s3_client import s3_client
+                try:
+                    s3_client.delete_file_by_hash(document_checksum)
+                    logger.info(f"Deleted S3 files for document {document_id} with checksum {document_checksum}")
+                except Exception as s3_error:
+                    logger.warning(f"Failed to delete S3 files for document {document_id}: {str(s3_error)}")
             
         except Exception as e:
             logger.error(f"Error in delete_document_and_segments: {str(e)}")

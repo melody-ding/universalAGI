@@ -63,6 +63,27 @@ export default function DocumentsPage() {
     window.open(document.blob_link, '_blank');
   };
 
+  const handleDelete = async (document: UploadedDocument) => {
+    if (!confirm(`Are you sure you want to delete "${document.title}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(apiEndpoints.deleteDocument(document.id), {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Delete failed');
+      }
+
+      await fetchUploadedDocuments();
+    } catch (error) {
+      console.error('Error deleting document:', error);
+      alert('Failed to delete document. Please try again.');
+    }
+  };
+
   return (
     <div className="flex flex-col h-full">
       <div className="p-6 border-b">
@@ -91,6 +112,7 @@ export default function DocumentsPage() {
                 documents={uploadedDocuments}
                 onView={handleView}
                 onDownload={handleDownload}
+                onDelete={handleDelete}
               />
             </div>
           </ScrollArea>
