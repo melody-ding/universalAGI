@@ -212,44 +212,76 @@ async def build_context_short_path(query: str, config: SmartRoutingConfig, docum
     
     logger.info(f"Building SHORT path context for: {query[:100]}...")
     
-    # Step 1: Generate query embedding
-    query_embedding = embedding_service.generate_embedding(query)
-    
-    # Step 2: Run parallel search with optimized parameters
-    vector_task = asyncio.create_task(
-        asyncio.to_thread(_vector_search_segments_optimized, query_embedding, config, document_id)
-    )
-    text_task = asyncio.create_task(
-        asyncio.to_thread(_text_search_segments_optimized, query, config, document_id)
-    )
-    
-    vector_results, text_results = await asyncio.gather(vector_task, text_task)
-    
-    logger.info(f"Found {len(vector_results)} vector + {len(text_results)} text results")
-    
-    # Step 3: Hybrid rerank with configurable alpha
-    final_results = _hybrid_rerank_optimized(vector_results, text_results, config.short_alpha)
-    
-    # Step 4: Group by document with SHORT path limits
-    blocks = _group_results_optimized(final_results, config)
-    
-    # Step 5: Format context text
-    context_parts = []
-    for block in blocks:
-        context_parts.append(f"{{{block.title}}}")
-        for snippet in block.snippets:
-            context_parts.append(snippet)
-        context_parts.append("")  # Empty line between documents
-    
-    context_text = "\n".join(context_parts).strip()
-    
-    logger.info(f"SHORT path context: {len(blocks)} docs, {len(final_results)} total segments")
-    
-    return ContextBundle(
-        query=query,
-        context_text=context_text,
-        blocks=blocks
-    )
+    if document_id:
+        # Use single document search for focused queries
+        logger.info(f"Using single document search for document ID: {document_id}")
+        from search.single_document_search import search_single_document
+        
+        # Use single document search with higher limit since we're only searching one doc
+        single_doc_context = await search_single_document(query, document_id, limit=config.short_per_doc * 2)
+        
+        # Convert single document context to ContextBundle format
+        from search.multi_document_search import ContextBlock
+        
+        if single_doc_context.results:
+            snippets = [f"[§{result.segment_ordinal}] {result.text}" for result in single_doc_context.results]
+            blocks = [ContextBlock(
+                document_id=document_id,
+                title=single_doc_context.document_title,
+                snippets=snippets
+            )]
+        else:
+            blocks = []
+        
+        logger.info(f"Single document context: 1 doc, {len(single_doc_context.results)} segments")
+        
+        return ContextBundle(
+            query=query,
+            context_text=single_doc_context.context_text,
+            blocks=blocks
+        )
+    else:
+        # Use multi-document search for general queries
+        logger.info("Using multi-document search")
+        
+        # Step 1: Generate query embedding
+        query_embedding = embedding_service.generate_embedding(query)
+        
+        # Step 2: Run parallel search with optimized parameters
+        vector_task = asyncio.create_task(
+            asyncio.to_thread(_vector_search_segments_optimized, query_embedding, config, document_id)
+        )
+        text_task = asyncio.create_task(
+            asyncio.to_thread(_text_search_segments_optimized, query, config, document_id)
+        )
+        
+        vector_results, text_results = await asyncio.gather(vector_task, text_task)
+        
+        logger.info(f"Found {len(vector_results)} vector + {len(text_results)} text results")
+        
+        # Step 3: Hybrid rerank with configurable alpha
+        final_results = _hybrid_rerank_optimized(vector_results, text_results, config.short_alpha)
+        
+        # Step 4: Group by document with SHORT path limits
+        blocks = _group_results_optimized(final_results, config)
+        
+        # Step 5: Format context text
+        context_parts = []
+        for block in blocks:
+            context_parts.append(f"{{{block.title}}}")
+            for snippet in block.snippets:
+                context_parts.append(snippet)
+            context_parts.append("")  # Empty line between documents
+        
+        context_text = "\n".join(context_parts).strip()
+        
+        logger.info(f"SHORT path context: {len(blocks)} docs, {len(final_results)} total segments")
+        
+        return ContextBundle(
+            query=query,
+            context_text=context_text,
+            blocks=blocks
+        )
 
 
 async def synthesize_answer_short(query: str, context: ContextBundle, config: SmartRoutingConfig = None) -> str:

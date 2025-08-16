@@ -27,7 +27,8 @@ async def root():
 async def send_message_stream(
     message: str = Form(""),
     conversation_history: str = Form("[]"),
-    image: UploadFile = File(None)
+    image: UploadFile = File(None),
+    document_id: int = Form(None)
 ):
     start_time = time.time()
     logger = get_logger(__name__)
@@ -38,7 +39,8 @@ async def send_message_stream(
             extra_fields={
                 "message_length": len(message),
                 "has_image": image is not None,
-                "history_length": len(conversation_history) if conversation_history else 0
+                "history_length": len(conversation_history) if conversation_history else 0,
+                "document_id": document_id
             }
         )
         
@@ -61,7 +63,7 @@ async def send_message_stream(
         
         async def safe_streaming_generator():
             try:
-                async for chunk in chat_service.get_streaming_response(message, history, image):
+                async for chunk in chat_service.get_streaming_response(message, history, image, document_id):
                     yield chunk
                 logger.info("Streaming completed successfully")
                 yield f"data: [DONE]\n\n"

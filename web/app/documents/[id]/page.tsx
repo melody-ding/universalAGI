@@ -5,8 +5,9 @@ import { useParams, useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Download, FileText, Calendar } from "lucide-react";
+import { ArrowLeft, Download, FileText, Calendar, ChevronLeft } from "lucide-react";
 import { apiEndpoints } from "@/lib/api";
+import { DocumentChatPanel } from "@/components/DocumentChatPanel";
 
 // Text Viewer Component
 interface TextViewerProps {
@@ -84,6 +85,9 @@ export default function DocumentDetailPage() {
   const [viewerError, setViewerError] = useState<string | null>(null);
   const [viewerLoaded, setViewerLoaded] = useState(false);
   const [viewerContentError, setViewerContentError] = useState(false);
+  
+  // Chat panel state
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   const documentId = params.id as string;
 
@@ -244,7 +248,7 @@ export default function DocumentDetailPage() {
             src={viewerUrl}
             controls
             className="max-w-full max-h-full mx-auto"
-            onLoadedData={() => setIframeLoaded(true)}
+            onLoadedData={() => setViewerLoaded(true)}
             onError={() => setViewerContentError(true)}
           >
             Your browser does not support video playback.
@@ -262,7 +266,7 @@ export default function DocumentDetailPage() {
               src={viewerUrl}
               controls
               className="w-full max-w-md"
-              onLoadedData={() => setIframeLoaded(true)}
+              onLoadedData={() => setViewerLoaded(true)}
               onError={() => setViewerContentError(true)}
             >
               Your browser does not support audio playback.
@@ -361,8 +365,10 @@ export default function DocumentDetailPage() {
 
   const { date, time } = formatDate(document.created_at);
 
+
+
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full relative">
       {/* Header */}
       <div className="p-6 border-b bg-white">
         <div className="flex items-center justify-between">
@@ -528,6 +534,25 @@ export default function DocumentDetailPage() {
           </Card>
         </div>
       </div>
+
+      {/* Floating Chat Button */}
+      <Button
+        onClick={() => setIsChatOpen(true)}
+        className={`fixed right-6 top-1/2 -translate-y-1/2 z-40 h-12 w-12 rounded-full shadow-lg transition-all duration-300 ${
+          isChatOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'
+        }`}
+        size="sm"
+      >
+        <ChevronLeft className="w-5 h-5" />
+      </Button>
+
+      {/* Document Chat Panel */}
+      <DocumentChatPanel
+        isOpen={isChatOpen}
+        onClose={() => setIsChatOpen(false)}
+        documentId={parseInt(documentId)}
+        documentTitle={document?.title}
+      />
     </div>
   );
 }

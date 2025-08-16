@@ -112,7 +112,8 @@ Begin reasoning privately when needed, then provide the final response.
         self, 
         message: str, 
         history: List[Message], 
-        image_file: UploadFile = None
+        image_file: UploadFile = None,
+        document_id: int = None
     ) -> AsyncGenerator[str, None]:
         
         # Process image if present
@@ -126,7 +127,8 @@ Begin reasoning privately when needed, then provide the final response.
             "conversation_history": [{"role": msg.role, "content": msg.content} for msg in history[-settings.MAX_CONVERSATION_HISTORY:]],
             "has_image": has_image,
             "image_data": image_data,
-            "session_context": "chat_session"
+            "session_context": "chat_session",
+            "document_id": document_id
         }
         
 
