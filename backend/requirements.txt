@@ -7,3 +7,8 @@ openai
 python-dotenv
 httpx
 python-multipart
+boto3
+PyPDF2
+python-docx
+psycopg2-binary
+numpy

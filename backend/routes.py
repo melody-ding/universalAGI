@@ -98,3 +98,37 @@ async def send_message_stream(
     except Exception as e:
         logger.error(f"Unexpected error in send_message_stream: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error processing message: {str(e)}")
+
+@router.post("/upload-document")
+async def upload_document(file: UploadFile = File(...)):
+    try:
+        logger.info(f"Received document upload request: filename='{file.filename}', size={file.size}")
+        
+        if not file:
+            raise HTTPException(status_code=400, detail="No file provided")
+        
+        if not file.filename:
+            raise HTTPException(status_code=400, detail="File must have a filename")
+        
+        # Validate file type
+        allowed_extensions = {'.pdf', '.docx', '.doc', '.txt'}
+        file_extension = '.' + file.filename.lower().split('.')[-1]
+        if file_extension not in allowed_extensions:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Unsupported file type. Allowed: {', '.join(allowed_extensions)}"
+            )
+        
+        # Process the document upload
+        from services.document_upload_service import document_upload_service
+        result = await document_upload_service.process_document_upload(file)
+        
+        logger.info(f"Document uploaded successfully: {file.filename}, doc_id: {result.document_id}")
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error uploading document: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error uploading document: {str(e)}")
