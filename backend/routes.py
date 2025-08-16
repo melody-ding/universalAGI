@@ -1,10 +1,13 @@
 import json
+import logging
 from fastapi import APIRouter, HTTPException, File, UploadFile, Form
 from fastapi.responses import StreamingResponse
 
 from config import settings
 from models import SendMessageResponse, Message
 from services import chat_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -47,26 +50,51 @@ async def send_message_stream(
     image: UploadFile = File(None)
 ):
     try:
+        logger.info(f"Received streaming request: message='{message[:100]}...', has_image={image is not None}")
+        
         if not settings.is_openai_configured:
+            logger.error("OpenAI API key not configured")
             raise HTTPException(status_code=500, detail="OpenAI API key not configured")
+        
+        if not message.strip() and not image:
+            logger.warning("Empty message and no image provided")
+            raise HTTPException(status_code=400, detail="Message or image required")
         
         # Parse conversation history from JSON string
         try:
             history_data = json.loads(conversation_history) if conversation_history else []
             history = [Message(**msg) for msg in history_data]
-        except (json.JSONDecodeError, ValueError):
+            logger.info(f"Parsed conversation history with {len(history)} messages")
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.warning(f"Failed to parse conversation history: {e}")
             history = []
         
+        async def safe_streaming_generator():
+            try:
+                async for chunk in chat_service.get_streaming_response(message, history, image):
+                    logger.debug(f"Yielding chunk: {chunk[:100]}...")
+                    yield chunk
+                logger.info("Streaming completed successfully")
+                yield f"data: [DONE]\n\n"
+            except Exception as e:
+                logger.error(f"Error in streaming generator: {str(e)}", exc_info=True)
+                error_data = json.dumps({'type': 'error', 'content': f"Streaming error: {str(e)}"})
+                yield f"data: {error_data}\n\n"
+                yield f"data: [DONE]\n\n"
+        
         return StreamingResponse(
-            chat_service.get_streaming_response(message, history, image),
+            safe_streaming_generator(),
             media_type="text/plain",
             headers={
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
-                "Access-Control-Allow-Origin": settings.ALLOWED_ORIGINS[0],
+                "Access-Control-Allow-Origin": settings.ALLOWED_ORIGINS[0] if settings.ALLOWED_ORIGINS else "*",
                 "Access-Control-Allow-Credentials": "true",
             }
         )
     
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Unexpected error in send_message_stream: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error processing message: {str(e)}")

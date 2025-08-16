@@ -13,11 +13,11 @@ interface ThinkingStep {
 
 interface ThinkingStepsProps {
   steps: ThinkingStep[];
-  isThinking: boolean;
-  isComplete: boolean;
+  isThinking?: boolean;
+  isComplete?: boolean;
 }
 
-export function ThinkingSteps({ steps, isThinking, isComplete }: ThinkingStepsProps) {
+export function ThinkingSteps({ steps = [], isThinking = false, isComplete = false }: ThinkingStepsProps) {
   const [isExpanded, setIsExpanded] = useState(true);
 
   // Reset displayed steps when steps array changes significantly (new message)
@@ -63,17 +63,17 @@ export function ThinkingSteps({ steps, isThinking, isComplete }: ThinkingStepsPr
       {isExpanded && (
         <CardContent className="pt-0">
           <div className="space-y-2">
-            {steps.map((step, index) => (
+            {steps.filter(step => step && typeof step === 'object').map((step, index) => (
               <div
-                key={`step-${step.step}`}
+                key={`step-${step.step || index}`}
                 className="flex items-start gap-3 p-2 rounded-lg bg-white/60 dark:bg-gray-800/40 border border-blue-100 dark:border-blue-900 animate-in slide-in-from-left duration-300"
                 style={{ animationDelay: `${index * 100}ms` }}
               >
                 <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-xs font-medium text-blue-700 dark:text-blue-300">
-                  {step.step}
+                  {step.step || index + 1}
                 </div>
                 <div className="flex-1 text-sm text-gray-700 dark:text-gray-300">
-                  {step.content}
+                  {step.content || 'Processing...'}
                 </div>
               </div>
             ))}
@@ -87,7 +87,7 @@ export function ThinkingSteps({ steps, isThinking, isComplete }: ThinkingStepsPr
                 <span>
                   {isComplete 
                     ? `Completed ${steps.length} reasoning steps`
-                    : `Step ${Math.max(...steps.map(s => s.step))} of ${Math.max(...steps.map(s => s.total_steps), steps[0]?.total_steps || 0)}`}
+                    : `Step ${Math.max(...steps.filter(s => s?.step).map(s => s.step), 0)} of ${Math.max(...steps.filter(s => s?.total_steps).map(s => s.total_steps), steps[0]?.total_steps || 0)}`}
                 </span>
               </div>
             </div>

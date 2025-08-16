@@ -2,6 +2,9 @@ FROM node:18-alpine
 
 WORKDIR /app
 
+# Install curl for health checks
+RUN apk add --no-cache curl
+
 # Copy package files
 COPY package*.json ./
 
@@ -17,6 +20,7 @@ EXPOSE 3000
 # For Next.js hot reloading to work properly in Docker
 ENV CHOKIDAR_USEPOLLING=true
 ENV WATCHPACK_POLLING=true
+ENV FAST_REFRESH=true
 
 # Run development server
 CMD ["npm", "run", "dev"]
