@@ -7,6 +7,7 @@ class DocumentModel(BaseModel):
     title: Optional[str] = None
     checksum: Optional[str] = None
     blob_link: Optional[str] = None
+    mime_type: Optional[str] = None
     embedding: Optional[List[float]] = None
     created_at: Optional[datetime] = None
 

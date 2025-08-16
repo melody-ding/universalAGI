@@ -43,7 +43,7 @@ class S3Client:
         except ClientError:
             return False
     
-    def upload_file(self, file_stream: BinaryIO, doc_hash: str, original_filename: str) -> str:
+    def upload_file(self, file_stream: BinaryIO, doc_hash: str, original_filename: str, content_type: str = None) -> str:
         """Upload file to S3 and return the S3 key."""
         s3_key = f"{doc_hash}/original/{original_filename}"
         
@@ -51,13 +51,16 @@ class S3Client:
             # Reset stream position
             file_stream.seek(0)
             
+            # Use provided content_type or default to octet-stream
+            upload_content_type = content_type or 'application/octet-stream'
+            
             # Upload file
             self.s3_client.upload_fileobj(
                 file_stream,
                 self.bucket_name,
                 s3_key,
                 ExtraArgs={
-                    'ContentType': 'application/octet-stream',
+                    'ContentType': upload_content_type,
                     'Metadata': {
                         'original-filename': original_filename,
                         'doc-hash': doc_hash
@@ -80,6 +83,48 @@ class S3Client:
             return url
         except ClientError as e:
             raise Exception(f"Failed to generate presigned URL: {str(e)}")
+    
+    def get_s3_key_from_hash_and_filename(self, doc_hash: str, original_filename: str) -> str:
+        """Generate S3 key from document hash and original filename."""
+        return f"{doc_hash}/original/{original_filename}"
+    
+    def generate_viewer_url(self, s3_key: str, content_type: str = None) -> str:
+        """Generate a presigned URL specifically for document viewing with longer expiry."""
+        try:
+            params = {
+                'Bucket': self.bucket_name, 
+                'Key': s3_key,
+                'ResponseContentDisposition': 'inline'  # For viewing in browser
+            }
+            
+            # Override content type if provided to ensure proper browser handling
+            if content_type:
+                params['ResponseContentType'] = content_type
+            
+            url = self.s3_client.generate_presigned_url(
+                'get_object',
+                Params=params,
+                ExpiresIn=7200  # 2 hours for viewer
+            )
+            return url
+        except ClientError as e:
+            raise Exception(f"Failed to generate viewer URL: {str(e)}")
+    
+    def get_s3_key_from_document(self, doc_hash: str) -> str:
+        """Get the S3 key for a document by listing objects with the hash prefix."""
+        try:
+            response = self.s3_client.list_objects_v2(
+                Bucket=self.bucket_name,
+                Prefix=f"{doc_hash}/original/",
+                MaxKeys=1
+            )
+            
+            if response.get('KeyCount', 0) > 0:
+                return response['Contents'][0]['Key']
+            else:
+                raise Exception(f"No file found for document hash: {doc_hash}")
+        except ClientError as e:
+            raise Exception(f"Failed to get S3 key: {str(e)}")
     
     def delete_file_by_hash(self, doc_hash: str) -> bool:
         """Delete all files associated with a document hash from S3."""

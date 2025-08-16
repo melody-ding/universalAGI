@@ -21,8 +21,9 @@ class DocumentUploadService:
         Main orchestration method for document upload process.
         Follows the complete pipeline: hash -> dedup -> S3 -> parse -> chunk -> embed -> store
         """
-        # Step 1: Receive file and record original filename
+        # Step 1: Receive file metadata
         original_filename = file.filename
+        mime_type = getattr(file, "content_type", None)
         if not original_filename:
             raise ValueError("File must have a filename")
         
@@ -42,12 +43,12 @@ class DocumentUploadService:
         
         # Step 4: Upload to S3
         upload_stream = self._create_file_stream(file_content)
-        s3_key = s3_client.upload_file(upload_stream, doc_hash, original_filename)
+        s3_key = s3_client.upload_file(upload_stream, doc_hash, original_filename, mime_type)
         blob_link = s3_client.get_file_url(s3_key)
         
-        # Step 5: Insert root document row
+        # Step 5: Insert root document row (with MIME type)
         title = self._clean_filename_for_title(original_filename)
-        document_id = postgres_client.insert_document(title, doc_hash, blob_link)
+        document_id = postgres_client.insert_document(title, doc_hash, blob_link, mime_type)
         
         # Step 6: Extract text content
         parse_stream = self._create_file_stream(file_content)

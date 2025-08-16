@@ -7,6 +7,8 @@ from utils.logging_config import get_logger, log_database_operation
 from utils.retry import retry_database_operation
 from utils.exceptions import DatabaseError, ConnectionError, create_database_error
 
+logger = get_logger(__name__)
+
 class PostgresClient:
     def __init__(self):
         self.rds_client = boto3.client(
@@ -61,7 +63,7 @@ class PostgresClient:
     def check_document_exists(self, checksum: str) -> Optional[DocumentModel]:
         """Check if a document with the given checksum already exists."""
         response = self.execute_statement(
-            "SELECT id, title, checksum, blob_link, embedding, created_at FROM documents WHERE checksum = :checksum",
+            "SELECT id, title, checksum, blob_link, mime_type, created_at FROM documents WHERE checksum = :checksum",
             [{'name': 'checksum', 'value': {'stringValue': checksum}}]
         )
         
@@ -82,23 +84,25 @@ class PostgresClient:
                 title=record[1].get('stringValue'),
                 checksum=record[2].get('stringValue'),
                 blob_link=record[3].get('stringValue'),
+                mime_type=record[4].get('stringValue'),
                 embedding=None,  # Skip embedding parsing for now
                 created_at=created_at
             )
         return None
     
-    def insert_document(self, title: Optional[str], checksum: str, blob_link: str) -> int:
+    def insert_document(self, title: Optional[str], checksum: str, blob_link: str, mime_type: Optional[str] = None) -> int:
         """Insert a new document and return its ID."""
         parameters = [
             {'name': 'title', 'value': {'stringValue': title} if title else {'isNull': True}},
             {'name': 'checksum', 'value': {'stringValue': checksum}},
-            {'name': 'blob_link', 'value': {'stringValue': blob_link}}
+            {'name': 'blob_link', 'value': {'stringValue': blob_link}},
+            {'name': 'mime_type', 'value': {'stringValue': mime_type} if mime_type else {'isNull': True}}
         ]
         
         response = self.execute_statement(
             """
-            INSERT INTO documents (title, checksum, blob_link)
-            VALUES (:title, :checksum, :blob_link)
+            INSERT INTO documents (title, checksum, blob_link, mime_type)
+            VALUES (:title, :checksum, :blob_link, :mime_type)
             RETURNING id
             """,
             parameters
@@ -248,17 +252,17 @@ class PostgresClient:
     def get_all_documents(self) -> List[DocumentModel]:
         """Get all documents from the database."""
         response = self.execute_statement(
-            "SELECT id, title, checksum, blob_link, created_at FROM documents ORDER BY created_at DESC"
+            "SELECT id, title, checksum, blob_link, mime_type, created_at FROM documents ORDER BY created_at DESC"
         )
         
         documents = []
         for record in response['records']:
             # Parse created_at datetime from string if present
             created_at = None
-            if len(record) > 4 and record[4].get('stringValue'):
+            if len(record) > 5 and record[5].get('stringValue'):
                 from datetime import datetime
                 try:
-                    created_at = datetime.fromisoformat(record[4]['stringValue'].replace('Z', '+00:00'))
+                    created_at = datetime.fromisoformat(record[5]['stringValue'].replace('Z', '+00:00'))
                 except:
                     created_at = None
             
@@ -267,6 +271,7 @@ class PostgresClient:
                 title=record[1].get('stringValue'),
                 checksum=record[2].get('stringValue'),
                 blob_link=record[3].get('stringValue'),
+                mime_type=record[4].get('stringValue'),
                 embedding=None,  # Skip embedding parsing for listing
                 created_at=created_at
             ))
@@ -276,7 +281,7 @@ class PostgresClient:
     def get_document_by_id(self, document_id: int) -> Optional[DocumentModel]:
         """Get a single document by ID."""
         response = self.execute_statement(
-            "SELECT id, title, checksum, blob_link, created_at FROM documents WHERE id = :document_id",
+            "SELECT id, title, checksum, blob_link, mime_type, created_at FROM documents WHERE id = :document_id",
             [{'name': 'document_id', 'value': {'longValue': document_id}}]
         )
         
@@ -287,10 +292,10 @@ class PostgresClient:
         
         # Parse created_at datetime from string if present
         created_at = None
-        if len(record) > 4 and record[4].get('stringValue'):
+        if len(record) > 5 and record[5].get('stringValue'):
             from datetime import datetime
             try:
-                created_at = datetime.fromisoformat(record[4]['stringValue'].replace('Z', '+00:00'))
+                created_at = datetime.fromisoformat(record[5]['stringValue'].replace('Z', '+00:00'))
             except:
                 created_at = None
         
@@ -299,6 +304,7 @@ class PostgresClient:
             title=record[1].get('stringValue'),
             checksum=record[2].get('stringValue'),
             blob_link=record[3].get('stringValue'),
+            mime_type=record[4].get('stringValue'),
             embedding=None,  # Skip embedding parsing for single document
             created_at=created_at
         )

@@ -182,7 +182,8 @@ async def get_documents():
                     "title": doc.title,
                     "checksum": doc.checksum,
                     "blob_link": doc.blob_link,
-                    "created_at": doc.created_at.isoformat() if doc.created_at else None
+                    "created_at": doc.created_at.isoformat() if doc.created_at else None,
+                    "mime_type": doc.mime_type
                 }
                 for doc in documents
             ]
@@ -231,7 +232,8 @@ async def get_document(document_id: int):
             "checksum": document.checksum,
             "blob_link": document.blob_link,
             "created_at": document.created_at.isoformat() if document.created_at else None,
-            "num_segments": segment_count
+            "num_segments": segment_count,
+            "mime_type": document.mime_type
         }
         
         logger.info(
@@ -257,6 +259,51 @@ async def get_document(document_id: int):
             exc_info=True
         )
         raise DatabaseError("SELECT", "documents", e)
+
+@router.get("/documents/{document_id}/viewer-url")
+async def get_document_viewer_url(document_id: int):
+    start_time = time.time()
+    logger = get_logger(__name__)
+    
+    try:
+        from database.postgres_client import postgres_client
+        from database.s3_client import s3_client
+        
+        # Get document details
+        document = postgres_client.get_document_by_id(document_id)
+        
+        if not document:
+            raise ResourceNotFoundError("Document", str(document_id))
+        
+        # Get S3 key from document hash
+        s3_key = s3_client.get_s3_key_from_document(document.checksum)
+        
+        # Generate fresh signed URL for viewing with correct content type
+        viewer_url = s3_client.generate_viewer_url(s3_key, document.mime_type)
+        
+        logger.info(
+            "Generated viewer URL successfully",
+            extra_fields={"document_id": document_id}
+        )
+        
+        # Log successful request
+        duration = time.time() - start_time
+        log_request(logger, "GET", f"/documents/{document_id}/viewer-url", 200, duration)
+        
+        return {"viewer_url": viewer_url}
+        
+    except (ResourceNotFoundError):
+        # Re-raise user-facing errors
+        raise
+    except Exception as e:
+        # Log and re-raise unexpected errors
+        duration = time.time() - start_time
+        logger.error(
+            f"Error generating viewer URL for document {document_id}: {str(e)}",
+            extra_fields={"duration": duration, "document_id": document_id},
+            exc_info=True
+        )
+        raise ExternalServiceError("s3", "generate_presigned_url", str(e))
 
 @router.delete("/documents/{document_id}")
 async def delete_document(document_id: int):

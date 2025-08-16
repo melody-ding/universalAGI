@@ -10,6 +10,7 @@ interface UploadedDocument {
   checksum: string;
   blob_link: string;
   created_at: string;
+  mime_type?: string;
 }
 
 interface DocumentTableProps {
