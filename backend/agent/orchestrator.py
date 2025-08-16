@@ -35,17 +35,17 @@ def route_message(user_text: str) -> Dict[str, Any]:
     """
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     
-    system_prompt = """You are a lightweight orchestrator. Choose the cheapest viable path.
+    system_prompt = """You are a lightweight orchestrator that routes between simple responses and document-based answers.
 - Output strict JSON only, no prose.
-- LIGHT: Use for informational requests that can be answered from knowledge (recipes, how-to guides, explanations, definitions, general advice). Also chitchat/FAQ.
-- HEAVY: Use only for requests requiring external tools, real-time data, file operations, calculations, or multi-step interactive processes.
-- Key distinction: "How do I bake a pie?" = LIGHT (informational), "Bake me a pie" = HEAVY (if tools existed).
-- "Tell me about X", "How to X", "What is X", "Explain X" are typically LIGHT.
+- LIGHT: Use for simple greetings, chitchat, basic definitions that don't require document lookup
+- HEAVY: Use for ANY informational questions that could benefit from document search, including questions about specific topics, requests for explanations, summaries, analysis, or any detailed information
+- Key distinction: "Hello" = LIGHT, "What is machine learning?" = HEAVY (could have documents), "Tell me about the contract terms" = HEAVY
+- When in doubt between LIGHT/HEAVY for informational questions, choose HEAVY (document search is better than guessing)
 - If LIGHT seems feasible, include a ≤2-sentence `light_draft`. Otherwise set it to "".
 JSON schema:
 { "type":"object","properties":{
     "route":{"enum":["LIGHT","HEAVY"]},
-    "intent":{"enum":["chitchat","faq","needs_tools","clarify"]},
+    "intent":{"enum":["chitchat","faq","document_query","clarify"]},
     "confidence":{"type":"number","minimum":0,"maximum":1},
     "query":{"type":"string"},
     "light_draft":{"type":"string"},
@@ -170,6 +170,10 @@ def handle_message(user_text: str) -> str:
             routing_result["intent"] in ["chitchat", "faq"] and
             routing_result["confidence"] >= 0.65
         )
+        
+        # Always route document queries to heavy agent
+        if routing_result["intent"] == "document_query":
+            should_use_light = False
         
         if should_use_light:
             # Step 3a: Try light path

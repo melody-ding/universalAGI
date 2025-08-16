@@ -183,31 +183,41 @@ class Planner:
             return current_plan
 
     def _get_planner_system_prompt(self) -> str:
-        """System prompt for the planning LLM"""
-        return """You are an expert planning agent. Your job is to analyze user requests and create detailed, executable plans.
+        """System prompt for the RAG-focused planning LLM"""
+        return """You are a RAG (Retrieval-Augmented Generation) planning agent. Your ONLY purpose is to create plans for answering questions using document search and information synthesis.
 
-For each plan, you should:
-1. Understand the user's core objective
-2. Break down the task into logical, sequential steps
-3. For each step, specify what action to take and why
-4. Identify if any tools or resources are needed
-5. Consider potential challenges and how to address them
+You can ONLY create plans with these two types of steps:
+1. SEARCH: Use "search_documents" tool to find relevant information
+2. SYNTHESIZE: Combine retrieved information to answer the user's question
+
+Available tool: "search_documents" - searches through uploaded documents
+
+For each user question, create a plan following this pattern:
+- Step 1: Search for relevant information using specific search queries
+- Step 2: (Optional) Search for additional information if the question has multiple aspects  
+- Final Step: Synthesize the retrieved information to provide a comprehensive answer
 
 Output your plan as a JSON object with this structure:
 {
-    "objective": "Clear description of what needs to be accomplished",
+    "objective": "Answer the user's question using document search and synthesis",
     "complexity": "low|medium|high",
     "steps": [
         {
-            "action": "Specific action to take",
-            "reasoning": "Why this step is necessary",
-            "tool_needed": "Name of tool if required (optional)",
-            "expected_outcome": "What should result from this step"
+            "action": "Search documents for [specific search query]",
+            "reasoning": "Why this search is needed to answer the question",
+            "tool_needed": "search_documents",
+            "expected_outcome": "What information should be found"
+        },
+        {
+            "action": "Synthesize retrieved information to answer: [user's question]",
+            "reasoning": "Combine findings to provide comprehensive answer",
+            "tool_needed": null,
+            "expected_outcome": "Clear, well-supported answer to the user's question"
         }
     ]
 }
 
-Make your plans specific, actionable, and well-reasoned. Each step should build logically on the previous ones."""
+Keep plans simple and focused on document-based information retrieval and synthesis only."""
 
     def _get_replanner_system_prompt(self) -> str:
         """System prompt for replanning"""
@@ -300,23 +310,18 @@ Output only the additional steps needed as a JSON plan."""
         }
 
     def _create_fallback_plan(self, user_message: str, has_image: bool) -> ExecutionPlan:
-        """Create a basic fallback plan when LLM planning fails"""
+        """Create a basic RAG-focused fallback plan when LLM planning fails"""
         steps = [
             PlanStep(
-                action="Analyze the user's request in detail",
-                reasoning="Need to understand what they're asking for"
+                action=f"Search documents for information related to: {user_message}",
+                reasoning="Find relevant documents to answer the user's question",
+                tool_needed="search_documents"
             ),
             PlanStep(
-                action="Gather relevant information and context",
-                reasoning="Collect necessary data to provide a complete response"
+                action=f"Synthesize retrieved information to answer: {user_message}",
+                reasoning="Combine document findings to provide comprehensive answer"
             )
         ]
-
-        if has_image:
-            steps.insert(1, PlanStep(
-                action="Examine and analyze the uploaded image",
-                reasoning="The image likely contains important context for the request"
-            ))
 
         steps.append(PlanStep(
             action="Formulate comprehensive response",

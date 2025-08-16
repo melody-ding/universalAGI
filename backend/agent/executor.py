@@ -9,7 +9,8 @@ from langchain_openai import ChatOpenAI
 from langchain.schema import SystemMessage, HumanMessage
 from config import settings
 from .planner import ExecutionPlan, PlanStep
-from .tools import Tool, LLMTool, AnalysisTool, GenerationTool, ReasoningTool, EvaluationTool
+from .tools import Tool
+from .rag_tool import RAGTool
 
 
 class ExecutionResult:
@@ -52,13 +53,9 @@ class Executor:
         self.tools = self._initialize_tools()
 
     def _initialize_tools(self) -> Dict[str, Tool]:
-        """Initialize available tools for execution"""
+        """Initialize available tools for RAG-only execution"""
         return {
-            "analyze": AnalysisTool(),
-            "generate": GenerationTool(),
-            "reason": ReasoningTool(),
-            "evaluate": EvaluationTool(),
-            "llm": LLMTool("llm", "General purpose LLM tool for various tasks")
+            "search_documents": RAGTool()
         }
 
     async def execute_plan(self, plan: ExecutionPlan, progress_callback: Optional[callable] = None) -> List[ExecutionResult]:
@@ -181,14 +178,6 @@ class Executor:
         """Execute step using a specific tool"""
         tool = self.tools[step.tool_needed]
         
-        # Prepare parameters for the tool
-        parameters = {
-            "action": step.action,
-            "reasoning": step.reasoning,
-            "context": context,
-            "prompt": self._build_tool_prompt(step, context)
-        }
-
         if progress_callback:
             await progress_callback({
                 "type": "tool_execution",
@@ -196,7 +185,19 @@ class Executor:
                 "tool": tool.name
             })
 
-        return await tool.execute(parameters)
+        # Extract search query from the step action for RAG tool
+        if step.tool_needed == "search_documents":
+            # Extract query from action like "Search documents for information about X"
+            query = step.action.replace("Search documents for", "").strip()
+            if query.startswith("information about"):
+                query = query.replace("information about", "").strip()
+            if query.startswith(":"):
+                query = query[1:].strip()
+            
+            return await tool.execute(query=query)
+        
+        # Fallback for other tools (though we only have RAG tool now)
+        return await tool.execute(action=step.action, reasoning=step.reasoning, context=context)
 
     async def _execute_with_llm(self, step: PlanStep, context: Dict[str, Any], progress_callback: Optional[callable] = None) -> str:
         """Execute step using direct LLM interaction"""
@@ -247,17 +248,27 @@ class Executor:
 ACTION: {step.action}
 REASONING: {step.reasoning}
 
-CONTEXT:
 """
-        if context:
+        
+        # Include retrieved document context for synthesis steps
+        if "synthesize" in step.action.lower() and context:
+            prompt += "RETRIEVED INFORMATION:\n"
+            for key, value in context.items():
+                if "context" in key.lower() and isinstance(value, str):
+                    prompt += f"{value}\n\n"
+                else:
+                    prompt += f"- {key}: {value}\n"
+        elif context:
+            prompt += "CONTEXT:\n"
             for key, value in context.items():
                 prompt += f"- {key}: {value}\n"
 
         prompt += """
-Execute this action and provide the result. Be specific and detailed in your response.
-If this step involves analysis, provide your analysis.
-If it involves generation, generate the requested content.
-If it involves evaluation, provide your evaluation with reasoning.
+Execute this action and provide the result. 
+
+For synthesis steps: Combine the retrieved information to provide a comprehensive answer to the user's question. Use specific details from the documents and cite sources where appropriate.
+
+For other steps: Be specific and detailed in your response.
 """
 
         return prompt
@@ -274,16 +285,20 @@ If it involves evaluation, provide your evaluation with reasoning.
         """
 
     def _get_executor_system_prompt(self) -> str:
-        """System prompt for the executor"""
-        return """You are an execution agent responsible for carrying out specific steps of a plan.
+        """System prompt for the RAG-focused executor"""
+        return """You are a RAG synthesis agent responsible for combining retrieved document information to answer user questions.
 
 Your job is to:
-1. Execute the given action precisely and thoroughly
-2. Provide detailed, useful results
-3. Stay focused on the specific step being executed
-4. Consider the context and reasoning provided
+1. Synthesize information from retrieved documents into comprehensive answers
+2. Cite specific sources when referencing document content
+3. Provide clear, well-structured responses based on the available information
+4. Acknowledge limitations when documents don't contain sufficient information
 
-Be thorough but focused. Each step should build toward the overall objective while being complete in itself."""
+When synthesizing information:
+- Combine insights from multiple sources when available
+- Maintain accuracy to the source documents
+- Organize information logically
+- Provide direct answers to the user's question based on the retrieved context"""
 
     def _is_critical_failure(self, result: ExecutionResult) -> bool:
         """Determine if a failure should stop the entire plan execution"""

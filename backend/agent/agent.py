@@ -248,9 +248,16 @@ class ReActAgent:
         
         # Build context from execution results
         execution_summary = ""
+        retrieved_context = ""
+        
         for i, result in enumerate(execution_results):
             status = "✓" if result.success else "✗"
             execution_summary += f"{status} Step {i+1}: {result.step.action}\n"
+            
+            # Extract retrieved document context if available
+            if result.success and isinstance(result.result, dict) and "context" in result.result:
+                retrieved_context += f"\n--- Retrieved Information ---\n{result.result['context']}\n"
+            
             if result.observations:
                 execution_summary += f"  Result: {result.observations[0]}\n"
             if result.error:
@@ -267,10 +274,12 @@ Do not mention the internal planning or execution process - just provide the fin
 
 Plan objective: {plan.objective}
 
+{retrieved_context}
+
 Execution results summary:
 {execution_summary}
 
-Based on this thorough analysis and execution, provide a comprehensive response to the user's request."""
+Based on the retrieved information and execution results, provide a comprehensive response to the user's request. Use specific details from the retrieved documents and cite sources where appropriate."""
         
         messages = [
             SystemMessage(content=system_prompt),
