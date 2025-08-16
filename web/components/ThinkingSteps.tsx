@@ -72,11 +72,8 @@ export function ThinkingSteps({ steps = [], isThinking = false, isComplete = fal
             {steps.filter(step => step && typeof step === 'object').map((step, index) => (
               <div
                 key={`step-${index}-${step.step || index}-${step.content?.slice(0, 20) || ''}`}
-                className="flex items-start gap-3 p-2 rounded-lg bg-white/60 dark:bg-gray-800/40 border border-blue-100 dark:border-blue-900"
+                className="flex items-start p-2 rounded-lg bg-white/60 dark:bg-gray-800/40 border border-blue-100 dark:border-blue-900"
               >
-                <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-xs font-medium text-blue-700 dark:text-blue-300">
-                  {step.step || index + 1}
-                </div>
                 <div className="flex-1 text-sm text-gray-700 dark:text-gray-300">
                   {step.content || 'Processing...'}
                 </div>
@@ -84,18 +81,6 @@ export function ThinkingSteps({ steps = [], isThinking = false, isComplete = fal
             ))}
           </div>
           
-          {steps.length > 0 && (
-            <div className="mt-3 pt-2 border-t border-blue-200 dark:border-blue-800">
-              <div className="flex items-center gap-2 text-xs text-blue-600 dark:text-blue-400">
-                <Brain className="h-3 w-3" />
-                <span>
-                  {isComplete 
-                    ? `Completed ${steps.length} reasoning steps`
-                    : `Processing step ${steps.length > 0 ? Math.max(...steps.filter(s => s?.step).map(s => s.step)) || steps.length : 0}`}
-                </span>
-              </div>
-            </div>
-          )}
         </CardContent>
       )}
     </Card>
