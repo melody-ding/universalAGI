@@ -9,6 +9,12 @@ from langchain.schema import SystemMessage, HumanMessage
 from config import settings
 from models import Message
 from agent import ReActAgent
+from agent.orchestrator import route_message, run_light_agent
+from agent.smart_orchestrator import smart_handle_message
+import logging
+from agent.streaming_orchestrator import stream_smart_orchestration
+
+logger = logging.getLogger(__name__)
 
 class ChatService:
     def __init__(self):
@@ -101,25 +107,6 @@ Begin reasoning privately when needed, then provide the final response.
         
         return messages
 
-    async def get_response(self, message: str, history: List[Message], image_file: UploadFile = None) -> str:
-        # Process image if present
-        has_image = image_file and image_file.filename
-        image_data = None
-        if has_image:
-            image_data = await self._process_image(image_file)
-        
-        # Build context from conversation history
-        context = {
-            "conversation_history": [{"role": msg.role, "content": msg.content} for msg in history[-settings.MAX_CONVERSATION_HISTORY:]],
-            "has_image": has_image,
-            "image_data": image_data,
-            "session_context": "chat_session"
-        }
-        
-        # Use the agent for processing
-        response = await self.agent.process_request(message, context, has_image)
-        
-        return response.content if response.success else response.error
     
     async def get_streaming_response(
         self, 
@@ -142,14 +129,13 @@ Begin reasoning privately when needed, then provide the final response.
             "session_context": "chat_session"
         }
         
-        # Use orchestrator to decide routing
-        from agent.orchestrator import route_message, run_light_agent
+
         
         try:
-            # Get routing decision
+            # First try the old light routing for simple responses
             routing_result = route_message(message)
             
-            # Apply routing logic
+            # Apply routing logic for simple chitchat
             should_use_light = (
                 routing_result["route"] == "LIGHT" and
                 routing_result["intent"] in ["chitchat", "faq"] and
@@ -170,12 +156,31 @@ Begin reasoning privately when needed, then provide the final response.
                     yield f"data: {json.dumps({'type': 'response_complete', 'content': light_response})}\n\n"
                     return
             
-            # Use heavy path (either directly routed or escalated)
-            async for event in self.agent.stream_request(message, context, has_image):
-                yield event.to_sse_format()
+            # For heavy processing, use streaming smart orchestrator
+            logger.info("STREAMING: Using smart orchestrator for heavy processing")
+            
+            
+            # Stream the smart orchestration process
+            async for event in stream_smart_orchestration(message):
+                # Ensure each streamed event is valid JSON
+                from agent.token_manager import ensure_json_validity
+                # Extract the JSON part after "data: "
+                if event.startswith("data: ") and not event.startswith("data: [DONE]"):
+                    json_part = event[6:].strip()
+                    if json_part and not json_part.startswith("[DONE]"):
+                        validated_json = ensure_json_validity(json_part)
+                        yield f"data: {validated_json}\n\n"
+                    else:
+                        yield event
+                else:
+                    yield event
+            
+            # Yield stream end
+            yield f"data: {json.dumps({'type': 'stream_end', 'content': 'Response complete'})}\n\n"
                 
         except Exception as e:
-            # Fallback to heavy agent on any orchestration errors
+            logger.error(f"Smart orchestrator streaming failed: {e}")
+            # Fallback to heavy agent streaming on any orchestration errors
             async for event in self.agent.stream_request(message, context, has_image):
                 yield event.to_sse_format()
     

@@ -170,5 +170,33 @@ class PostgresClient:
         except Exception as e:
             logger.error(f"Error in delete_document_and_segments: {str(e)}")
             raise
+    
+    def get_all_documents(self) -> List[DocumentModel]:
+        """Get all documents from the database."""
+        response = self.execute_statement(
+            "SELECT id, title, checksum, blob_link, created_at FROM documents ORDER BY created_at DESC"
+        )
+        
+        documents = []
+        for record in response['records']:
+            # Parse created_at datetime from string if present
+            created_at = None
+            if len(record) > 4 and record[4].get('stringValue'):
+                from datetime import datetime
+                try:
+                    created_at = datetime.fromisoformat(record[4]['stringValue'].replace('Z', '+00:00'))
+                except:
+                    created_at = None
+            
+            documents.append(DocumentModel(
+                id=record[0].get('longValue'),
+                title=record[1].get('stringValue'),
+                checksum=record[2].get('stringValue'),
+                blob_link=record[3].get('stringValue'),
+                embedding=None,  # Skip embedding parsing for listing
+                created_at=created_at
+            ))
+        
+        return documents
 
 postgres_client = PostgresClient()

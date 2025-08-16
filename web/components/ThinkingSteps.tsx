@@ -27,6 +27,12 @@ export function ThinkingSteps({ steps = [], isThinking = false, isComplete = fal
     }
   }, [steps]);
 
+  // If thinking is complete, don't show the blue box
+  if (isComplete) {
+    return null;
+  }
+
+  // If not thinking and no steps, don't show anything
   if (!isThinking && steps.length === 0) {
     return null;
   }
@@ -76,7 +82,6 @@ export function ThinkingSteps({ steps = [], isThinking = false, isComplete = fal
                 </div>
               </div>
             ))}
-            
           </div>
           
           {steps.length > 0 && (
@@ -86,13 +91,7 @@ export function ThinkingSteps({ steps = [], isThinking = false, isComplete = fal
                 <span>
                   {isComplete 
                     ? `Completed ${steps.length} reasoning steps`
-                    : (() => {
-                        const validSteps = steps.filter(s => s?.step);
-                        const validTotalSteps = steps.filter(s => s?.total_steps);
-                        const currentStep = validSteps.length > 0 ? Math.max(...validSteps.map(s => s.step)) : 0;
-                        const totalSteps = validTotalSteps.length > 0 ? Math.max(...validTotalSteps.map(s => s.total_steps)) : (steps[0]?.total_steps || 0);
-                        return `Step ${currentStep} of ${totalSteps}`;
-                      })()}
+                    : `Processing step ${steps.length > 0 ? Math.max(...steps.filter(s => s?.step).map(s => s.step)) || steps.length : 0}`}
                 </span>
               </div>
             </div>

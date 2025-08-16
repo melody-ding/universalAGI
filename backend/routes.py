@@ -15,33 +15,6 @@ router = APIRouter()
 async def root():
     return {"message": "Chat Backend API is running"}
 
-@router.post("/send-message", response_model=SendMessageResponse)
-async def send_message(
-    message: str = Form(""),
-    conversation_history: str = Form("[]"),
-    image: UploadFile = File(None)
-):
-    try:
-        if not settings.is_openai_configured:
-            raise HTTPException(status_code=500, detail="OpenAI API key not configured")
-        
-        # Parse conversation history from JSON string
-        try:
-            history_data = json.loads(conversation_history) if conversation_history else []
-            history = [Message(**msg) for msg in history_data]
-        except (json.JSONDecodeError, ValueError):
-            history = []
-        
-        # Get response from service
-        response_content = await chat_service.get_response(message, history, image)
-        
-        return SendMessageResponse(
-            response=response_content,
-            status="success"
-        )
-    
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing message: {str(e)}")
 
 @router.post("/send-message-stream")
 async def send_message_stream(
@@ -132,3 +105,27 @@ async def upload_document(file: UploadFile = File(...)):
     except Exception as e:
         logger.error(f"Error uploading document: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error uploading document: {str(e)}")
+
+@router.get("/documents")
+async def get_documents():
+    try:
+        from database.postgres_client import postgres_client
+        documents = postgres_client.get_all_documents()
+        
+        # Convert to response format
+        return {
+            "documents": [
+                {
+                    "id": doc.id,
+                    "title": doc.title,
+                    "checksum": doc.checksum,
+                    "blob_link": doc.blob_link,
+                    "created_at": doc.created_at.isoformat() if doc.created_at else None
+                }
+                for doc in documents
+            ]
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching documents: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error fetching documents: {str(e)}")

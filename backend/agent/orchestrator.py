@@ -14,10 +14,13 @@ Usage:
     print(response)
 """
 
+import logging
 import json
 import os
 from typing import Dict, Any
 from openai import OpenAI
+
+logger = logging.getLogger(__name__)
 
 
 def route_message(user_text: str) -> Dict[str, Any]:
@@ -122,32 +125,54 @@ Provide a brief, helpful response or output exactly "ESCALATE" if you're uncerta
 
 def run_heavy_agent(user_text: str) -> str:
     """
-    Placeholder that calls the heavy ReAct agent.
+    Enhanced heavy agent using smart orchestrator with fallback to ReAct agent.
     
     Args:
         user_text: User's input message
         
     Returns:
-        Response from the heavy ReAct agent
+        Response from smart orchestrator or fallback ReAct agent
     """
-    # Import here to avoid circular imports
-    from .agent import ReActAgent
     import asyncio
     
     try:
-        agent = ReActAgent()
+        # First try the new smart orchestrator
+        from .smart_orchestrator import smart_handle_message
         
-        # Run the async method in a sync context
+        logger.info(f"HEAVY AGENT: Using smart orchestrator for query: {user_text[:100]}...")
+        
+        # Run the async smart orchestrator
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
-            response = loop.run_until_complete(agent.process_request(user_text))
-            return response.content
+            response = loop.run_until_complete(smart_handle_message(user_text))
+            logger.info("HEAVY AGENT: Smart orchestrator completed successfully")
+            return response
         finally:
             loop.close()
             
     except Exception as e:
-        return f"I encountered an error while processing your request: {str(e)}"
+        logger.warning(f"Smart orchestrator failed: {str(e)}, falling back to ReAct agent")
+        
+        # Fallback to original ReAct agent if smart orchestrator fails
+        try:
+            from .agent import ReActAgent
+            agent = ReActAgent()
+            
+            logger.info("HEAVY AGENT: Using fallback ReAct agent")
+            
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                response = loop.run_until_complete(agent.process_request(user_text))
+                logger.info("HEAVY AGENT: ReAct agent completed successfully")
+                return response.content
+            finally:
+                loop.close()
+                
+        except Exception as fallback_error:
+            logger.error(f"Fallback ReAct agent failed: {str(fallback_error)}")
+            return f"I encountered an error while processing your request: {str(e)} (fallback also failed: {str(fallback_error)})"
 
 
 def handle_message(user_text: str) -> str:
