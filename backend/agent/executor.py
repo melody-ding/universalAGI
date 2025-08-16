@@ -11,6 +11,9 @@ from config import settings
 from .planner import ExecutionPlan, PlanStep
 from .tools import Tool
 from .rag_tool import RAGTool
+from utils.logging_config import get_logger, log_external_service_call
+from utils.retry import retry_external_service
+from utils.exceptions import ExternalServiceError, ProcessingError, create_external_service_error
 
 
 class ExecutionResult:
@@ -130,6 +133,16 @@ class Executor:
         """
         start_time = time.time()
         step.status = "executing"
+        logger = get_logger(__name__)
+
+        logger.info(
+            "Executing plan step",
+            extra_fields={
+                "step_action": step.action[:100] + "..." if len(step.action) > 100 else step.action,
+                "tool_needed": step.tool_needed,
+                "context_keys": list(context.keys()) if context else []
+            }
+        )
 
         if progress_callback:
             await progress_callback({
@@ -155,7 +168,25 @@ class Executor:
                 observations=observations
             )
 
+            logger.info(
+                "Step executed successfully",
+                extra_fields={
+                    "step_action": step.action[:100] + "..." if len(step.action) > 100 else step.action,
+                    "result_length": len(str(result)) if result else 0,
+                    "observations_count": len(observations)
+                }
+            )
+
         except Exception as e:
+            logger.error(
+                f"Step execution failed: {str(e)}",
+                extra_fields={
+                    "step_action": step.action[:100] + "..." if len(step.action) > 100 else step.action,
+                    "error_type": type(e).__name__
+                },
+                exc_info=True
+            )
+            
             execution_result = ExecutionResult(
                 step=step,
                 success=False,
@@ -199,8 +230,12 @@ class Executor:
         # Fallback for other tools (though we only have RAG tool now)
         return await tool.execute(action=step.action, reasoning=step.reasoning, context=context)
 
+    @retry_external_service("llm_execution")
     async def _execute_with_llm(self, step: PlanStep, context: Dict[str, Any], progress_callback: Optional[callable] = None) -> str:
         """Execute step using direct LLM interaction"""
+        start_time = time.time()
+        logger = get_logger(__name__)
+        
         execution_prompt = self._build_execution_prompt(step, context)
         
         messages = [
@@ -214,8 +249,33 @@ class Executor:
                 "content": "Processing with language model...",
             })
 
-        response = self.llm.invoke(messages)
-        return response.content
+        try:
+            response = self.llm.invoke(messages)
+            
+            # Log successful LLM call
+            duration = time.time() - start_time
+            log_external_service_call(
+                logger.bind(operation="llm_execution"),
+                "OpenAI", "chat_completion", duration, True,
+                model=settings.MODEL_NAME,
+                prompt_length=len(execution_prompt),
+                response_length=len(response.content)
+            )
+            
+            return response.content
+            
+        except Exception as e:
+            # Log failed LLM call
+            duration = time.time() - start_time
+            log_external_service_call(
+                logger.bind(operation="llm_execution"),
+                "OpenAI", "chat_completion", duration, False,
+                model=settings.MODEL_NAME,
+                prompt_length=len(execution_prompt)
+            )
+            
+            # Raise appropriate error
+            raise create_external_service_error("OpenAI", "chat_completion", e)
 
     async def _generate_observations(self, step: PlanStep, result: Any, context: Dict[str, Any]) -> List[str]:
         """Generate observations about the step execution"""

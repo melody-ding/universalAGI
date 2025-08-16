@@ -1,10 +1,11 @@
 import boto3
 import os
-import logging
+import time
 from typing import List, Optional, Dict, Any
 from database.models import DocumentModel, DocumentSegmentModel
-
-logger = logging.getLogger(__name__)
+from utils.logging_config import get_logger, log_database_operation
+from utils.retry import retry_database_operation
+from utils.exceptions import DatabaseError, ConnectionError, create_database_error
 
 class PostgresClient:
     def __init__(self):
@@ -18,19 +19,44 @@ class PostgresClient:
         self.secret_arn = os.getenv('RDS_SECRET_ARN')
         self.database_name = os.getenv('RDS_DATABASE_NAME', 'postgres')
     
+    @retry_database_operation("execute_statement")
     def execute_statement(self, sql: str, parameters: List = None):
         """Execute SQL statement using RDS Data API."""
-        params = {
-            'resourceArn': self.database_arn,
-            'secretArn': self.secret_arn,
-            'database': self.database_name,
-            'sql': sql
-        }
+        start_time = time.time()
+        logger = get_logger(__name__)
         
-        if parameters:
-            params['parameters'] = parameters
-        
-        return self.rds_client.execute_statement(**params)
+        try:
+            params = {
+                'resourceArn': self.database_arn,
+                'secretArn': self.secret_arn,
+                'database': self.database_name,
+                'sql': sql
+            }
+            
+            if parameters:
+                params['parameters'] = parameters
+            
+            result = self.rds_client.execute_statement(**params)
+            
+            # Log successful operation
+            duration = time.time() - start_time
+            log_database_operation(
+                logger.bind(operation="execute_statement"),
+                "EXECUTE", "custom", duration, True
+            )
+            
+            return result
+            
+        except Exception as e:
+            # Log failed operation
+            duration = time.time() - start_time
+            log_database_operation(
+                logger.bind(operation="execute_statement"),
+                "EXECUTE", "custom", duration, False
+            )
+            
+            # Raise appropriate error
+            raise create_database_error("EXECUTE", "custom", e)
     
     def check_document_exists(self, checksum: str) -> Optional[DocumentModel]:
         """Check if a document with the given checksum already exists."""
@@ -80,21 +106,32 @@ class PostgresClient:
         
         return response['records'][0][0]['longValue']
     
+    @retry_database_operation("insert_document_segment")
     def insert_document_segment(self, document_id: int, segment_ordinal: int, text: str, embedding: List[float]) -> int:
         """Insert a document segment and return its ID."""
+        start_time = time.time()
+        logger = get_logger(__name__)
+        
         # Convert embedding list to string format for vector type
         embedding_str = '[' + ','.join(map(str, embedding)) + ']'
-        logger.info(f"Inserting segment with embedding length: {len(embedding)}")
-        logger.info(f"Embedding string preview: {embedding_str[:100]}...")
-        
-        parameters = [
-            {'name': 'document_id', 'value': {'longValue': document_id}},
-            {'name': 'segment_ordinal', 'value': {'longValue': segment_ordinal}},
-            {'name': 'text', 'value': {'stringValue': text}},
-            {'name': 'embedding', 'value': {'stringValue': embedding_str}}
-        ]
+        logger.info(
+            "Inserting document segment",
+            extra_fields={
+                "document_id": document_id,
+                "segment_ordinal": segment_ordinal,
+                "text_length": len(text),
+                "embedding_length": len(embedding)
+            }
+        )
         
         try:
+            parameters = [
+                {'name': 'document_id', 'value': {'longValue': document_id}},
+                {'name': 'segment_ordinal', 'value': {'longValue': segment_ordinal}},
+                {'name': 'text', 'value': {'stringValue': text}},
+                {'name': 'embedding', 'value': {'stringValue': embedding_str}}
+            ]
+            
             response = self.execute_statement(
                 """
                 INSERT INTO document_segments (document_id, segment_ordinal, text, embedding)
@@ -104,11 +141,29 @@ class PostgresClient:
                 parameters
             )
             
-            return response['records'][0][0]['longValue']
+            segment_id = response['records'][0][0]['longValue']
+            
+            # Log successful operation
+            duration = time.time() - start_time
+            log_database_operation(
+                logger.bind(operation="insert_document_segment"),
+                "INSERT", "document_segments", duration, True,
+                document_id=document_id, segment_id=segment_id
+            )
+            
+            return segment_id
+            
         except Exception as e:
-            logger.error(f"Error in insert_document_segment: {str(e)}")
-            logger.info(f"Parameters were: document_id={document_id}, segment_ordinal={segment_ordinal}, text_length={len(text)}")
-            raise
+            # Log failed operation
+            duration = time.time() - start_time
+            log_database_operation(
+                logger.bind(operation="insert_document_segment"),
+                "INSERT", "document_segments", duration, False,
+                document_id=document_id, segment_ordinal=segment_ordinal
+            )
+            
+            # Raise appropriate error
+            raise create_database_error("INSERT", "document_segments", e)
     
     def update_document_embedding(self, document_id: int, embedding: List[float]):
         """Update the document's mean-pooled embedding."""
@@ -217,5 +272,35 @@ class PostgresClient:
             ))
         
         return documents
+    
+    def get_document_by_id(self, document_id: int) -> Optional[DocumentModel]:
+        """Get a single document by ID."""
+        response = self.execute_statement(
+            "SELECT id, title, checksum, blob_link, created_at FROM documents WHERE id = :document_id",
+            [{'name': 'document_id', 'value': {'longValue': document_id}}]
+        )
+        
+        if not response['records']:
+            return None
+        
+        record = response['records'][0]
+        
+        # Parse created_at datetime from string if present
+        created_at = None
+        if len(record) > 4 and record[4].get('stringValue'):
+            from datetime import datetime
+            try:
+                created_at = datetime.fromisoformat(record[4]['stringValue'].replace('Z', '+00:00'))
+            except:
+                created_at = None
+        
+        return DocumentModel(
+            id=record[0].get('longValue'),
+            title=record[1].get('stringValue'),
+            checksum=record[2].get('stringValue'),
+            blob_link=record[3].get('stringValue'),
+            embedding=None,  # Skip embedding parsing for single document
+            created_at=created_at
+        )
 
 postgres_client = PostgresClient()

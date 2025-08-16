@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { DocumentUpload } from "@/components/DocumentUpload";
 import { DocumentTable } from "@/components/DocumentTable";
@@ -17,6 +18,7 @@ interface UploadedDocument {
 export default function DocumentsPage() {
   const [uploadedDocuments, setUploadedDocuments] = useState<UploadedDocument[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
 
   useEffect(() => {
     fetchUploadedDocuments();
@@ -56,7 +58,7 @@ export default function DocumentsPage() {
   };
 
   const handleView = (document: UploadedDocument) => {
-    console.log('View document:', document);
+    router.push(`/documents/${document.id}`);
   };
 
   const handleDownload = (document: UploadedDocument) => {
