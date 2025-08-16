@@ -10,6 +10,7 @@ from .smart_routing_config import SmartRoutingConfig, DEFAULT_CONFIG
 from .smart_probe import compute_probe_signals, compute_routing_score, ProbeSignals
 from .short_path import run_short_path, ShortPathResult
 from .long_path import run_long_path, LongPathResult
+from .token_manager import validate_response_length, validate_json_response_length
 
 logger = logging.getLogger(__name__)
 
@@ -40,14 +41,14 @@ async def stream_smart_orchestration(
         
         signals = compute_probe_signals(query, config)
         
-        yield f"data: {json.dumps({'type': 'thinking_step', 'content': 'Computing routing score...', 'step': 2})}\n\n"
+        yield f"data: {json.dumps({'type': 'thinking_step', 'content': 'Determining search strategy...', 'step': 2})}\n\n"
         
         score = compute_routing_score(signals, config)
         
         # Step 2: Route decision
         if score >= config.router.threshold:
             path = "SHORT"
-            yield f"data: {json.dumps({'type': 'thinking_step', 'content': f'SHORT path selected (score: {score:.2f})', 'step': 3})}\n\n"
+            yield f"data: {json.dumps({'type': 'thinking_step', 'content': 'Using focused search approach...', 'step': 3})}\n\n"
             
             logger.info(f"ROUTE DECISION: SHORT path selected")
             logger.info(f"   Score: {score:.3f} >= threshold {config.router.threshold}")
@@ -81,12 +82,11 @@ async def stream_smart_orchestration(
                 yield f"data: {json.dumps({'type': 'thinking_complete', 'content': 'Analysis complete', 'execution_summary': {'path': 'SHORT'}})}\n\n"
                 
                 # Ensure SHORT path response is also JSON-safe
-                from .token_manager import validate_response_length
                 validated_answer = validate_response_length(short_result.answer, config)
-                
-                import json
                 try:
-                    response_event = json.dumps({'type': 'response_complete', 'content': validated_answer})
+                    response_data = {'type': 'response_complete', 'content': validated_answer}
+                    response_event = json.dumps(response_data)
+                    response_event = validate_json_response_length(response_event, config)
                     yield f"data: {response_event}\n\n"
                 except (UnicodeDecodeError, ValueError) as e:
                     logger.error(f"JSON encoding error for SHORT response: {e}")
@@ -99,7 +99,7 @@ async def stream_smart_orchestration(
                 
         else:
             path = "LONG"
-            yield f"data: {json.dumps({'type': 'thinking_step', 'content': f'LONG path selected (score: {score:.2f})', 'step': 3})}\n\n"
+            yield f"data: {json.dumps({'type': 'thinking_step', 'content': 'Using comprehensive search approach...', 'step': 3})}\n\n"
             
             logger.info(f"ROUTE DECISION: LONG path selected")
             logger.info(f"   Score: {score:.3f} < threshold {config.router.threshold}")
@@ -124,10 +124,10 @@ async def _stream_short_path_execution(query: str, config: SmartRoutingConfig, d
         # Import here to avoid circular imports
         from .short_path import build_context_short_path
         
-        yield f"data: {json.dumps({'type': 'thinking_step', 'content': 'Generating search embeddings...', 'step': 5})}\n\n"
+        yield f"data: {json.dumps({'type': 'thinking_step', 'content': 'Preparing search...', 'step': 5})}\n\n"
         
         # Show what we're searching for
-        search_desc = f"hybrid search for: {query[:60]}..."
+        search_desc = f"Searching for: {query[:60]}..."
         yield f"data: {json.dumps({'type': 'thinking_step', 'content': search_desc, 'step': 6})}\n\n"
         
         # Build context (this is where the RAG tool logging happens)
@@ -136,7 +136,7 @@ async def _stream_short_path_execution(query: str, config: SmartRoutingConfig, d
         # Report search results
         docs_found = len(context.blocks)
         segments_found = sum(len(block.snippets) for block in context.blocks)
-        result_summary = f"Found {docs_found} documents with {segments_found} relevant sections"
+        result_summary = f"Found {docs_found} relevant documents"
         
         yield f"data: {json.dumps({'type': 'thinking_step', 'content': result_summary, 'step': 7})}\n\n"
         
@@ -151,7 +151,7 @@ async def _stream_long_path_execution(query: str, signals: ProbeSignals, config:
     try:
         logger.info("Starting LONG path execution streaming...")
         
-        yield f"data: {json.dumps({'type': 'thinking_step', 'content': 'Generating search strategy...', 'step': 4})}\n\n"
+        yield f"data: {json.dumps({'type': 'thinking_step', 'content': 'Planning comprehensive search...', 'step': 4})}\n\n"
         
         # Import here to avoid circular imports
         from .long_path import generate_subqueries, execute_subquery, synthesize_comprehensive_answer, EvidenceBundle
@@ -166,7 +166,7 @@ async def _stream_long_path_execution(query: str, signals: ProbeSignals, config:
         
         step_counter = 5
         
-        yield f"data: {json.dumps({'type': 'thinking_step', 'content': f'Planning {len(subqueries)} targeted searches...', 'step': step_counter})}\n\n"
+        yield f"data: {json.dumps({'type': 'thinking_step', 'content': f'Breaking down into {len(subqueries)} focused searches...', 'step': step_counter})}\n\n"
         step_counter += 1
         
         # Execute subqueries with progress
@@ -176,7 +176,7 @@ async def _stream_long_path_execution(query: str, signals: ProbeSignals, config:
         for i, subquery in enumerate(subqueries):
             logger.info(f"Executing subquery {i+1}/{len(subqueries)}: {subquery.query[:50]}...")
             
-            yield f"data: {json.dumps({'type': 'thinking_step', 'content': f'Executing search {i+1}/{len(subqueries)}: {subquery.query[:50]}...', 'step': step_counter})}\n\n"
+            yield f"data: {json.dumps({'type': 'thinking_step', 'content': f'Search {i+1}/{len(subqueries)}: {subquery.query[:50]}...', 'step': step_counter})}\n\n"
             step_counter += 1
             
             # Check early exit before each subquery (except first)
@@ -194,11 +194,11 @@ async def _stream_long_path_execution(query: str, signals: ProbeSignals, config:
                 early_exit_reason = _should_early_exit(evidence, config, start_time)
                 if early_exit_reason:
                     logger.info(f"Early exit triggered: {early_exit_reason}")
-                    yield f"data: {json.dumps({'type': 'thinking_step', 'content': f'Early exit: {early_exit_reason}', 'step': step_counter})}\n\n"
+                    yield f"data: {json.dumps({'type': 'thinking_step', 'content': 'Found sufficient information', 'step': step_counter})}\n\n"
                     break
             
             # Execute subquery with streaming
-            yield f"data: {json.dumps({'type': 'thinking_step', 'content': f'Searching documents for: {subquery.query[:60]}...', 'step': step_counter})}\n\n"
+            yield f"data: {json.dumps({'type': 'thinking_step', 'content': f'Searching for: {subquery.query[:60]}...', 'step': step_counter})}\n\n"
             step_counter += 1
             
             context = await execute_subquery(subquery, config)
@@ -206,7 +206,7 @@ async def _stream_long_path_execution(query: str, signals: ProbeSignals, config:
             executed_subqueries.append(subquery)
             
             # Stream search results
-            result_summary = f"Found {len(context.blocks)} documents with {sum(len(b.snippets) for b in context.blocks)} relevant sections"
+            result_summary = f"Found {len(context.blocks)} relevant documents"
             logger.info(f"Subquery {i+1} completed: {len(context.blocks)} docs")
             
             yield f"data: {json.dumps({'type': 'thinking_step', 'content': result_summary, 'step': step_counter})}\n\n"
@@ -214,7 +214,7 @@ async def _stream_long_path_execution(query: str, signals: ProbeSignals, config:
         
         # Final synthesis
         logger.info("Starting final synthesis...")
-        yield f"data: {json.dumps({'type': 'thinking_step', 'content': 'Synthesizing comprehensive answer...', 'step': step_counter})}\n\n"
+        yield f"data: {json.dumps({'type': 'thinking_step', 'content': 'Analyzing and synthesizing results...', 'step': step_counter})}\n\n"
         
         final_evidence = EvidenceBundle(
             contexts=contexts,
@@ -233,13 +233,13 @@ async def _stream_long_path_execution(query: str, signals: ProbeSignals, config:
         yield f"data: {json.dumps({'type': 'thinking_complete', 'content': 'Detailed analysis complete', 'execution_summary': {'path': 'LONG', 'subqueries': len(executed_subqueries), 'docs': final_evidence.total_docs, 'segments': final_evidence.total_segments}})}\n\n"
         
         # Ensure response content doesn't break JSON structure
-        from .token_manager import validate_response_length
         validated_answer = validate_response_length(answer, config)
         
         # Escape any problematic characters in the response for JSON
-        import json
         try:
-            response_event = json.dumps({'type': 'response_complete', 'content': validated_answer})
+            response_data = {'type': 'response_complete', 'content': validated_answer}
+            response_event = json.dumps(response_data)
+            response_event = validate_json_response_length(response_event, config)
             yield f"data: {response_event}\n\n"
         except (UnicodeDecodeError, ValueError) as e:
             logger.error(f"JSON encoding error for response: {e}")

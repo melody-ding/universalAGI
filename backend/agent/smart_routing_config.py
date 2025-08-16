@@ -65,9 +65,9 @@ DEFAULT_CONFIG = SmartRoutingConfig(
         threshold=0.5
     ),
     escalation=EscalationConfig(
-        min_strong_segments=3,
-        max_distinct_docs=3,
-        min_avg_vec_sim=0.70,
-        min_fts_hit_rate=0.15
+        min_strong_segments=2,
+        max_distinct_docs=4,
+        min_avg_vec_sim=0.60, 
+        min_fts_hit_rate=0.10
     )
 )

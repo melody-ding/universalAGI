@@ -57,6 +57,8 @@ export function useStreamingChat() {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         
+        let buffer = '';
+        
         const readChunk = () => {
           reader.read().then(({ done, value }) => {
             if (done) {
@@ -66,7 +68,12 @@ export function useStreamingChat() {
             }
             
             const chunk = decoder.decode(value);
-            const lines = chunk.split('\n');
+            buffer += chunk;
+            
+            // Process complete lines from buffer
+            const lines = buffer.split('\n');
+            // Keep the last incomplete line in buffer
+            buffer = lines.pop() || '';
             
             for (const line of lines) {
               if (line.startsWith('data: ')) {

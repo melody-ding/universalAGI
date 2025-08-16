@@ -16,6 +16,7 @@ interface UploadedDocument {
 
 export default function DocumentsPage() {
   const [uploadedDocuments, setUploadedDocuments] = useState<UploadedDocument[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     fetchUploadedDocuments();
@@ -23,6 +24,7 @@ export default function DocumentsPage() {
 
   const fetchUploadedDocuments = async () => {
     try {
+      setIsLoading(true);
       const response = await fetch(apiEndpoints.getDocuments);
       if (response.ok) {
         const data = await response.json();
@@ -32,6 +34,8 @@ export default function DocumentsPage() {
       }
     } catch (error) {
       console.error('Error fetching documents:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -69,19 +73,28 @@ export default function DocumentsPage() {
       </div>
 
       <div className="flex-1 overflow-hidden">
-        <ScrollArea className="h-full">
-          <div className="p-6 space-y-6">
-            <DocumentUpload 
-              onUpload={handleUpload} 
-              hasExistingDocuments={uploadedDocuments.length > 0}
-            />
-            <DocumentTable 
-              documents={uploadedDocuments}
-              onView={handleView}
-              onDownload={handleDownload}
-            />
+        {isLoading ? (
+          <div className="h-full flex items-center justify-center">
+            <div className="flex flex-col items-center space-y-4">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+              <p className="text-gray-600">Loading documents...</p>
+            </div>
           </div>
-        </ScrollArea>
+        ) : (
+          <ScrollArea className="h-full">
+            <div className="p-6 space-y-6">
+              <DocumentUpload 
+                onUpload={handleUpload} 
+                hasExistingDocuments={uploadedDocuments.length > 0}
+              />
+              <DocumentTable 
+                documents={uploadedDocuments}
+                onView={handleView}
+                onDownload={handleDownload}
+              />
+            </div>
+          </ScrollArea>
+        )}
       </div>
     </div>
   );
