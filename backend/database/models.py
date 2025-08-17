@@ -27,3 +27,18 @@ class DocumentUploadResponse(BaseModel):
     num_segments: int
     status: str = "success"
     message: Optional[str] = None
+
+class ComplianceGroupModel(BaseModel):
+    id: Optional[str] = None  # UUID as string
+    name: str
+    description: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+class ComplianceGroupCreateRequest(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+class ComplianceGroupUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None

@@ -5,6 +5,7 @@ from fastapi.responses import StreamingResponse
 
 from config import settings
 from models import SendMessageResponse, Message, CitationRequest, CitationResponse, CitationInfo
+from database.models import ComplianceGroupCreateRequest, ComplianceGroupUpdateRequest
 from services import chat_service
 from utils.logging_config import get_logger, log_request
 from utils.error_handler import (
@@ -429,3 +430,262 @@ async def resolve_citations(request: CitationRequest):
             exc_info=True
         )
         raise DatabaseError("SELECT", "document_segments", e)
+
+@router.get("/compliance-groups")
+async def get_compliance_groups():
+    """Get all compliance groups."""
+    start_time = time.time()
+    logger = get_logger(__name__)
+    
+    try:
+        from database.postgres_client import postgres_client
+        compliance_groups = postgres_client.get_all_compliance_groups()
+        
+        # Convert to response format
+        response_data = {
+            "compliance_groups": [
+                {
+                    "id": group.id,
+                    "name": group.name,
+                    "description": group.description,
+                    "created_at": group.created_at.isoformat() if group.created_at else None,
+                    "updated_at": group.updated_at.isoformat() if group.updated_at else None
+                }
+                for group in compliance_groups
+            ]
+        }
+        
+        logger.info(
+            "Compliance groups fetched successfully",
+            extra_fields={"group_count": len(compliance_groups)}
+        )
+        
+        # Log successful request
+        duration = time.time() - start_time
+        log_request(logger, "GET", "/compliance-groups", 200, duration)
+        
+        return response_data
+        
+    except Exception as e:
+        # Log and re-raise unexpected errors
+        duration = time.time() - start_time
+        logger.error(
+            f"Error fetching compliance groups: {str(e)}",
+            extra_fields={"duration": duration},
+            exc_info=True
+        )
+        raise DatabaseError("SELECT", "compliance_frameworks", e)
+
+@router.get("/compliance-groups/{group_id}")
+async def get_compliance_group(group_id: str):
+    """Get a single compliance group by ID."""
+    start_time = time.time()
+    logger = get_logger(__name__)
+    
+    try:
+        from database.postgres_client import postgres_client
+        compliance_group = postgres_client.get_compliance_group_by_id(group_id)
+        
+        if not compliance_group:
+            raise ResourceNotFoundError("Compliance Group", group_id)
+        
+        # Convert to response format
+        response_data = {
+            "id": compliance_group.id,
+            "name": compliance_group.name,
+            "description": compliance_group.description,
+            "created_at": compliance_group.created_at.isoformat() if compliance_group.created_at else None,
+            "updated_at": compliance_group.updated_at.isoformat() if compliance_group.updated_at else None
+        }
+        
+        logger.info(
+            "Compliance group fetched successfully",
+            extra_fields={"group_id": group_id}
+        )
+        
+        # Log successful request
+        duration = time.time() - start_time
+        log_request(logger, "GET", f"/compliance-groups/{group_id}", 200, duration)
+        
+        return response_data
+        
+    except (ResourceNotFoundError):
+        # Re-raise user-facing errors
+        raise
+    except Exception as e:
+        # Log and re-raise unexpected errors
+        duration = time.time() - start_time
+        logger.error(
+            f"Error fetching compliance group {group_id}: {str(e)}",
+            extra_fields={"duration": duration, "group_id": group_id},
+            exc_info=True
+        )
+        raise DatabaseError("SELECT", "compliance_frameworks", e)
+
+@router.post("/compliance-groups")
+async def create_compliance_group(request: ComplianceGroupCreateRequest):
+    """Create a new compliance group."""
+    start_time = time.time()
+    logger = get_logger(__name__)
+    
+    try:
+        # Validate input
+        if not request.name or not request.name.strip():
+            raise ValidationError("Compliance group name is required")
+        
+        from database.postgres_client import postgres_client
+        
+        # Create the compliance group
+        try:
+            group_id = postgres_client.create_compliance_group(
+                name=request.name.strip(),
+                description=request.description.strip() if request.description else None
+            )
+        except Exception as db_error:
+            # Check if it's a unique constraint violation
+            error_str = str(db_error)
+            if "compliance_frameworks_name_key" in error_str or "duplicate key value" in error_str:
+                raise ValidationError(f"A compliance group with the name '{request.name.strip()}' already exists. Please choose a different name.")
+            else:
+                # Re-raise other database errors
+                raise
+        
+        # Fetch the created group to return full details
+        created_group = postgres_client.get_compliance_group_by_id(group_id)
+        
+        response_data = {
+            "id": created_group.id,
+            "name": created_group.name,
+            "description": created_group.description,
+            "created_at": created_group.created_at.isoformat() if created_group.created_at else None,
+            "updated_at": created_group.updated_at.isoformat() if created_group.updated_at else None,
+            "status": "success"
+        }
+        
+        logger.info(
+            "Compliance group created successfully",
+            extra_fields={"group_id": group_id, "name": request.name}
+        )
+        
+        # Log successful request
+        duration = time.time() - start_time
+        log_request(logger, "POST", "/compliance-groups", 201, duration)
+        
+        return response_data
+        
+    except (ValidationError):
+        # Re-raise user-facing errors
+        raise
+    except Exception as e:
+        # Log and re-raise unexpected errors
+        duration = time.time() - start_time
+        logger.error(
+            f"Error creating compliance group: {str(e)}",
+            extra_fields={"duration": duration, "name": request.name if request else None},
+            exc_info=True
+        )
+        raise DatabaseError("INSERT", "compliance_frameworks", e)
+
+@router.put("/compliance-groups/{group_id}")
+async def update_compliance_group(group_id: str, request: ComplianceGroupUpdateRequest):
+    """Update an existing compliance group."""
+    start_time = time.time()
+    logger = get_logger(__name__)
+    
+    try:
+        from database.postgres_client import postgres_client
+        
+        # Check if group exists
+        existing_group = postgres_client.get_compliance_group_by_id(group_id)
+        if not existing_group:
+            raise ResourceNotFoundError("Compliance Group", group_id)
+        
+        # Update the compliance group
+        updated = postgres_client.update_compliance_group(
+            group_id=group_id,
+            name=request.name.strip() if request.name else None,
+            description=request.description.strip() if request.description else None
+        )
+        
+        if not updated:
+            raise ValidationError("No fields provided for update")
+        
+        # Fetch the updated group to return full details
+        updated_group = postgres_client.get_compliance_group_by_id(group_id)
+        
+        response_data = {
+            "id": updated_group.id,
+            "name": updated_group.name,
+            "description": updated_group.description,
+            "created_at": updated_group.created_at.isoformat() if updated_group.created_at else None,
+            "updated_at": updated_group.updated_at.isoformat() if updated_group.updated_at else None,
+            "status": "success"
+        }
+        
+        logger.info(
+            "Compliance group updated successfully",
+            extra_fields={"group_id": group_id}
+        )
+        
+        # Log successful request
+        duration = time.time() - start_time
+        log_request(logger, "PUT", f"/compliance-groups/{group_id}", 200, duration)
+        
+        return response_data
+        
+    except (ValidationError, ResourceNotFoundError):
+        # Re-raise user-facing errors
+        raise
+    except Exception as e:
+        # Log and re-raise unexpected errors
+        duration = time.time() - start_time
+        logger.error(
+            f"Error updating compliance group {group_id}: {str(e)}",
+            extra_fields={"duration": duration, "group_id": group_id},
+            exc_info=True
+        )
+        raise DatabaseError("UPDATE", "compliance_frameworks", e)
+
+@router.delete("/compliance-groups/{group_id}")
+async def delete_compliance_group(group_id: str):
+    """Delete a compliance group."""
+    start_time = time.time()
+    logger = get_logger(__name__)
+    
+    try:
+        from database.postgres_client import postgres_client
+        
+        # Check if group exists
+        existing_group = postgres_client.get_compliance_group_by_id(group_id)
+        if not existing_group:
+            raise ResourceNotFoundError("Compliance Group", group_id)
+        
+        # Delete the compliance group
+        deleted = postgres_client.delete_compliance_group(group_id)
+        
+        if not deleted:
+            raise ProcessingError("compliance_group_deletion", "database_operation", "Failed to delete compliance group")
+        
+        logger.info(
+            "Compliance group deleted successfully",
+            extra_fields={"group_id": group_id}
+        )
+        
+        # Log successful request
+        duration = time.time() - start_time
+        log_request(logger, "DELETE", f"/compliance-groups/{group_id}", 200, duration)
+        
+        return {"message": f"Compliance group {group_id} deleted successfully", "status": "success"}
+        
+    except (ResourceNotFoundError):
+        # Re-raise user-facing errors
+        raise
+    except Exception as e:
+        # Log and re-raise unexpected errors
+        duration = time.time() - start_time
+        logger.error(
+            f"Error deleting compliance group {group_id}: {str(e)}",
+            extra_fields={"duration": duration, "group_id": group_id},
+            exc_info=True
+        )
+        raise DatabaseError("DELETE", "compliance_frameworks", e)

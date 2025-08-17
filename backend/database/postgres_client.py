@@ -2,7 +2,7 @@ import boto3
 import os
 import time
 from typing import List, Optional, Dict, Any
-from database.models import DocumentModel, DocumentSegmentModel
+from database.models import DocumentModel, DocumentSegmentModel, ComplianceGroupModel
 from utils.logging_config import get_logger, log_database_operation
 from utils.retry import retry_database_operation
 from utils.exceptions import DatabaseError, ConnectionError, create_database_error
@@ -308,5 +308,148 @@ class PostgresClient:
             embedding=None,  # Skip embedding parsing for single document
             created_at=created_at
         )
+    
+    def get_all_compliance_groups(self) -> List[ComplianceGroupModel]:
+        """Get all compliance groups from the database."""
+        response = self.execute_statement(
+            "SELECT id, name, description, created_at, updated_at FROM compliance_frameworks ORDER BY created_at DESC"
+        )
+        
+        compliance_groups = []
+        for record in response['records']:
+            # Parse datetime fields from string if present
+            created_at = None
+            updated_at = None
+            
+            if len(record) > 3 and record[3].get('stringValue'):
+                from datetime import datetime
+                try:
+                    created_at = datetime.fromisoformat(record[3]['stringValue'].replace('Z', '+00:00'))
+                except:
+                    created_at = None
+            
+            if len(record) > 4 and record[4].get('stringValue'):
+                from datetime import datetime
+                try:
+                    updated_at = datetime.fromisoformat(record[4]['stringValue'].replace('Z', '+00:00'))
+                except:
+                    updated_at = None
+            
+            compliance_groups.append(ComplianceGroupModel(
+                id=record[0].get('stringValue'),  # UUID is string value
+                name=record[1].get('stringValue'),
+                description=record[2].get('stringValue'),
+                created_at=created_at,
+                updated_at=updated_at
+            ))
+        
+        return compliance_groups
+    
+    def get_compliance_group_by_id(self, group_id: str) -> Optional[ComplianceGroupModel]:
+        """Get a single compliance group by ID."""
+        response = self.execute_statement(
+            "SELECT id, name, description, created_at, updated_at FROM compliance_frameworks WHERE id = :group_id::uuid",
+            [{'name': 'group_id', 'value': {'stringValue': group_id}}]
+        )
+        
+        if not response['records']:
+            return None
+        
+        record = response['records'][0]
+        
+        # Parse datetime fields from string if present
+        created_at = None
+        updated_at = None
+        
+        if len(record) > 3 and record[3].get('stringValue'):
+            from datetime import datetime
+            try:
+                created_at = datetime.fromisoformat(record[3]['stringValue'].replace('Z', '+00:00'))
+            except:
+                created_at = None
+        
+        if len(record) > 4 and record[4].get('stringValue'):
+            from datetime import datetime
+            try:
+                updated_at = datetime.fromisoformat(record[4]['stringValue'].replace('Z', '+00:00'))
+            except:
+                updated_at = None
+        
+        return ComplianceGroupModel(
+            id=record[0].get('stringValue'),
+            name=record[1].get('stringValue'),
+            description=record[2].get('stringValue'),
+            created_at=created_at,
+            updated_at=updated_at
+        )
+    
+    def compliance_group_name_exists(self, name: str) -> bool:
+        """Check if a compliance group with the given name already exists."""
+        response = self.execute_statement(
+            "SELECT COUNT(*) FROM compliance_frameworks WHERE LOWER(name) = LOWER(:name)",
+            [{'name': 'name', 'value': {'stringValue': name.strip()}}]
+        )
+        
+        count = response['records'][0][0]['longValue']
+        return count > 0
+    
+    def create_compliance_group(self, name: str, description: Optional[str] = None) -> str:
+        """Create a new compliance group and return its ID."""
+        parameters = [
+            {'name': 'name', 'value': {'stringValue': name}},
+            {'name': 'description', 'value': {'stringValue': description} if description else {'isNull': True}}
+        ]
+        
+        response = self.execute_statement(
+            """
+            INSERT INTO compliance_frameworks (name, description)
+            VALUES (:name, :description)
+            RETURNING id
+            """,
+            parameters
+        )
+        
+        group_id = response['records'][0][0]['stringValue']
+        logger.info(f"Created compliance group {group_id} with name: {name}")
+        return group_id
+    
+    def update_compliance_group(self, group_id: str, name: Optional[str] = None, description: Optional[str] = None) -> bool:
+        """Update a compliance group. Returns True if updated successfully."""
+        # Build dynamic update query based on provided fields
+        update_fields = []
+        parameters = [{'name': 'group_id', 'value': {'stringValue': group_id}}]
+        
+        if name is not None:
+            update_fields.append("name = :name")
+            parameters.append({'name': 'name', 'value': {'stringValue': name}})
+        
+        if description is not None:
+            update_fields.append("description = :description")
+            parameters.append({'name': 'description', 'value': {'stringValue': description} if description else {'isNull': True}})
+        
+        if not update_fields:
+            return False  # Nothing to update
+        
+        # Add updated_at
+        update_fields.append("updated_at = CURRENT_TIMESTAMP")
+        
+        sql = f"UPDATE compliance_frameworks SET {', '.join(update_fields)} WHERE id = :group_id::uuid"
+        
+        response = self.execute_statement(sql, parameters)
+        
+        # Check if any rows were affected
+        return response.get('numberOfRecordsUpdated', 0) > 0
+    
+    def delete_compliance_group(self, group_id: str) -> bool:
+        """Delete a compliance group. Returns True if deleted successfully."""
+        parameters = [{'name': 'group_id', 'value': {'stringValue': group_id}}]
+        
+        response = self.execute_statement(
+            "DELETE FROM compliance_frameworks WHERE id = :group_id::uuid",
+            parameters
+        )
+        
+        logger.info(f"Deleted compliance group {group_id}")
+        return response.get('numberOfRecordsUpdated', 0) > 0
 
 postgres_client = PostgresClient()

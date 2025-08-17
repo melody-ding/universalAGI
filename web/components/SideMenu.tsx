@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { MessageSquare, FileText, Home } from "lucide-react";
+import { MessageSquare, FileText, Home, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navigation = [
   { name: "Home", href: "/", icon: Home },
   { name: "Chat", href: "/chat", icon: MessageSquare },
   { name: "Documents", href: "/documents", icon: FileText },
+  { name: "Compliance Groups", href: "/compliance-groups", icon: Shield },
 ];
 
 export function SideMenu() {
