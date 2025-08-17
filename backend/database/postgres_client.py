@@ -3,6 +3,7 @@ import os
 import time
 from typing import List, Optional, Dict, Any
 from database.models import DocumentModel, DocumentSegmentModel, ComplianceGroupModel
+from services.embedding_service import embedding_service
 from utils.logging_config import get_logger, log_database_operation
 from utils.retry import retry_database_operation
 from utils.exceptions import DatabaseError, ConnectionError, create_database_error
@@ -345,7 +346,7 @@ class PostgresClient:
     def get_all_compliance_groups(self) -> List[ComplianceGroupModel]:
         """Get all compliance groups from the database."""
         response = self.execute_statement(
-            "SELECT id, name, description, created_at, updated_at FROM compliance_frameworks ORDER BY created_at DESC"
+            "SELECT id, name, description, embedding, created_at, updated_at FROM compliance_frameworks ORDER BY created_at DESC"
         )
         
         compliance_groups = []
@@ -354,24 +355,34 @@ class PostgresClient:
             created_at = None
             updated_at = None
             
-            if len(record) > 3 and record[3].get('stringValue'):
-                from datetime import datetime
-                try:
-                    created_at = datetime.fromisoformat(record[3]['stringValue'].replace('Z', '+00:00'))
-                except:
-                    created_at = None
-            
             if len(record) > 4 and record[4].get('stringValue'):
                 from datetime import datetime
                 try:
-                    updated_at = datetime.fromisoformat(record[4]['stringValue'].replace('Z', '+00:00'))
+                    created_at = datetime.fromisoformat(record[4]['stringValue'].replace('Z', '+00:00'))
+                except:
+                    created_at = None
+            
+            if len(record) > 5 and record[5].get('stringValue'):
+                from datetime import datetime
+                try:
+                    updated_at = datetime.fromisoformat(record[5]['stringValue'].replace('Z', '+00:00'))
                 except:
                     updated_at = None
+            
+            # Parse embedding if present
+            embedding = None
+            if len(record) > 3 and record[3].get('stringValue'):
+                try:
+                    import json
+                    embedding = json.loads(record[3]['stringValue'])
+                except:
+                    embedding = None
             
             compliance_groups.append(ComplianceGroupModel(
                 id=record[0].get('stringValue'),  # UUID is string value
                 name=record[1].get('stringValue'),
                 description=record[2].get('stringValue'),
+                embedding=embedding,
                 created_at=created_at,
                 updated_at=updated_at
             ))
@@ -381,7 +392,7 @@ class PostgresClient:
     def get_compliance_group_by_id(self, group_id: str) -> Optional[ComplianceGroupModel]:
         """Get a single compliance group by ID."""
         response = self.execute_statement(
-            "SELECT id, name, description, created_at, updated_at FROM compliance_frameworks WHERE id = :group_id::uuid",
+            "SELECT id, name, description, embedding, created_at, updated_at FROM compliance_frameworks WHERE id = :group_id::uuid",
             [{'name': 'group_id', 'value': {'stringValue': group_id}}]
         )
         
@@ -394,24 +405,34 @@ class PostgresClient:
         created_at = None
         updated_at = None
         
-        if len(record) > 3 and record[3].get('stringValue'):
-            from datetime import datetime
-            try:
-                created_at = datetime.fromisoformat(record[3]['stringValue'].replace('Z', '+00:00'))
-            except:
-                created_at = None
-        
         if len(record) > 4 and record[4].get('stringValue'):
             from datetime import datetime
             try:
-                updated_at = datetime.fromisoformat(record[4]['stringValue'].replace('Z', '+00:00'))
+                created_at = datetime.fromisoformat(record[4]['stringValue'].replace('Z', '+00:00'))
+            except:
+                created_at = None
+        
+        if len(record) > 5 and record[5].get('stringValue'):
+            from datetime import datetime
+            try:
+                updated_at = datetime.fromisoformat(record[5]['stringValue'].replace('Z', '+00:00'))
             except:
                 updated_at = None
+        
+        # Parse embedding if present
+        embedding = None
+        if len(record) > 3 and record[3].get('stringValue'):
+            try:
+                import json
+                embedding = json.loads(record[3]['stringValue'])
+            except:
+                embedding = None
         
         return ComplianceGroupModel(
             id=record[0].get('stringValue'),
             name=record[1].get('stringValue'),
             description=record[2].get('stringValue'),
+            embedding=embedding,
             created_at=created_at,
             updated_at=updated_at
         )
@@ -426,28 +447,57 @@ class PostgresClient:
         count = response['records'][0][0]['longValue']
         return count > 0
     
+    def _generate_compliance_group_embedding(self, name: str, description: Optional[str] = None) -> List[float]:
+        """Generate embedding for compliance group based on name and description."""
+        # Combine name and description for embedding
+        text_parts = [name]
+        if description and description.strip():
+            text_parts.append(description.strip())
+        
+        combined_text = " - ".join(text_parts)
+        return embedding_service.generate_embedding(combined_text)
+    
     def create_compliance_group(self, name: str, description: Optional[str] = None) -> str:
         """Create a new compliance group and return its ID."""
+        # Generate embedding for the compliance group
+        embedding = self._generate_compliance_group_embedding(name, description)
+        embedding_str = '[' + ','.join(map(str, embedding)) + ']'
+        
         parameters = [
             {'name': 'name', 'value': {'stringValue': name}},
-            {'name': 'description', 'value': {'stringValue': description} if description else {'isNull': True}}
+            {'name': 'description', 'value': {'stringValue': description} if description else {'isNull': True}},
+            {'name': 'embedding', 'value': {'stringValue': embedding_str}}
         ]
         
         response = self.execute_statement(
             """
-            INSERT INTO compliance_frameworks (name, description)
-            VALUES (:name, :description)
+            INSERT INTO compliance_frameworks (name, description, embedding)
+            VALUES (:name, :description, :embedding::vector)
             RETURNING id
             """,
             parameters
         )
         
         group_id = response['records'][0][0]['stringValue']
-        logger.info(f"Created compliance group {group_id} with name: {name}")
+        logger.info(f"Created compliance group {group_id} with name: {name} and embedding")
         return group_id
     
     def update_compliance_group(self, group_id: str, name: Optional[str] = None, description: Optional[str] = None) -> bool:
         """Update a compliance group. Returns True if updated successfully."""
+        # If name or description is being updated, we need to regenerate the embedding
+        if name is not None or description is not None:
+            # Get current values to fill in any missing fields for embedding generation
+            current_group = self.get_compliance_group_by_id(group_id)
+            if not current_group:
+                return False
+            
+            final_name = name if name is not None else current_group.name
+            final_description = description if description is not None else current_group.description
+            
+            # Generate new embedding
+            embedding = self._generate_compliance_group_embedding(final_name, final_description)
+            embedding_str = '[' + ','.join(map(str, embedding)) + ']'
+        
         # Build dynamic update query based on provided fields
         update_fields = []
         parameters = [{'name': 'group_id', 'value': {'stringValue': group_id}}]
@@ -460,6 +510,11 @@ class PostgresClient:
             update_fields.append("description = :description")
             parameters.append({'name': 'description', 'value': {'stringValue': description} if description else {'isNull': True}})
         
+        # Add embedding update if name or description changed
+        if name is not None or description is not None:
+            update_fields.append("embedding = :embedding::vector")
+            parameters.append({'name': 'embedding', 'value': {'stringValue': embedding_str}})
+        
         if not update_fields:
             return False  # Nothing to update
         
@@ -471,7 +526,11 @@ class PostgresClient:
         response = self.execute_statement(sql, parameters)
         
         # Check if any rows were affected
-        return response.get('numberOfRecordsUpdated', 0) > 0
+        updated = response.get('numberOfRecordsUpdated', 0) > 0
+        if updated and (name is not None or description is not None):
+            logger.info(f"Updated compliance group {group_id} with new embedding")
+        
+        return updated
     
     def delete_compliance_group(self, group_id: str) -> bool:
         """Delete a compliance group. Returns True if deleted successfully."""

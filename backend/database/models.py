@@ -33,6 +33,7 @@ class ComplianceGroupModel(BaseModel):
     id: Optional[str] = None  # UUID as string
     name: str
     description: Optional[str] = None
+    embedding: Optional[List[float]] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

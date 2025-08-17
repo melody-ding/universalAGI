@@ -33,7 +33,6 @@ interface DocumentChatPanelProps {
 export function DocumentChatPanel({ isOpen, onClose, documentId, documentTitle }: DocumentChatPanelProps) {
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
-  const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Add initial welcome message when panel opens for the first time
@@ -52,7 +51,7 @@ export function DocumentChatPanel({ isOpen, onClose, documentId, documentTitle }
 
   const handleChatSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputText.trim() && !selectedImage) return;
+    if (!inputText.trim()) return;
 
     const userMessage: Message = {
       id: Date.now(),
@@ -63,7 +62,6 @@ export function DocumentChatPanel({ isOpen, onClose, documentId, documentTitle }
     setChatMessages(prev => [...prev, userMessage]);
     const messageText = inputText;
     setInputText("");
-    setSelectedImage(null);
     setIsProcessing(true);
 
     try {
@@ -71,10 +69,6 @@ export function DocumentChatPanel({ isOpen, onClose, documentId, documentTitle }
       const formData = new FormData();
       formData.append('message', messageText);
       formData.append('document_id', documentId.toString());
-      
-      if (selectedImage) {
-        formData.append('image', selectedImage);
-      }
 
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/send-message-stream`, {
         method: 'POST',
@@ -248,14 +242,26 @@ export function DocumentChatPanel({ isOpen, onClose, documentId, documentTitle }
         
         {/* Chat Input - Fixed at bottom */}
         <div className="absolute bottom-0 left-0 right-0 border-t bg-white">
-          <ChatInput
-            inputText={inputText}
-            setInputText={setInputText}
-            selectedImage={selectedImage}
-            setSelectedImage={setSelectedImage}
-            isProcessing={isProcessing}
-            onSubmit={handleChatSubmit}
-          />
+          <div className="border-t p-4">
+            <form onSubmit={handleChatSubmit} className="flex items-end space-x-2">
+              <div className="flex-1">
+                <input
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  placeholder="Type your message..."
+                  disabled={isProcessing}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <button 
+                type="submit" 
+                disabled={isProcessing || !inputText.trim()}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isProcessing ? "Sending..." : "Send"}
+              </button>
+            </form>
+          </div>
         </div>
       </div>
 

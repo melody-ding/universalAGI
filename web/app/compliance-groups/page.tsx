@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Shield, Calendar, AlertCircle, Trash2 } from "lucide-react";
@@ -227,9 +228,8 @@ export default function ComplianceGroupsPage() {
                     <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
                       Description
                     </label>
-                    <Input
+                    <Textarea
                       id="description"
-                      type="text"
                       value={formData.description}
                       onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                       placeholder="Brief description of the compliance framework"
@@ -258,7 +258,7 @@ export default function ComplianceGroupsPage() {
           )}
 
           {/* Groups List */}
-          <div className="space-y-4">
+          <div className="w-full space-y-4">
             {groups.length === 0 ? (
               <Card>
                 <CardContent className="flex flex-col items-center justify-center py-12">
@@ -280,15 +280,12 @@ export default function ComplianceGroupsPage() {
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="flex items-center mb-2">
-                          <h3 className="text-lg font-semibold text-gray-900 mr-3">
+                          <h3 className="text-lg font-semibold text-gray-900">
                             {group.name}
                           </h3>
-                          <Badge variant="secondary" className="text-xs">
-                            Active
-                          </Badge>
                         </div>
                         {group.description && (
-                          <p className="text-gray-600 mb-3">{group.description}</p>
+                          <p className="text-gray-600 mb-4 mt-2 line-clamp-2">{group.description}</p>
                         )}
                         <div className="flex items-center text-xs text-gray-500">
                           <Calendar className="h-3 w-3 mr-1" />

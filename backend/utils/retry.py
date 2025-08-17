@@ -135,7 +135,6 @@ def retry(
             
             for attempt in range(1, config.max_attempts + 1):
                 try:
-                    logger.debug(f"Attempt {attempt}/{config.max_attempts} for {operation}")
                     return func(*args, **kwargs)
                     
                 except Exception as e:
@@ -172,7 +171,6 @@ def retry(
             
             for attempt in range(1, config.max_attempts + 1):
                 try:
-                    logger.debug(f"Attempt {attempt}/{config.max_attempts} for {operation}")
                     return await func(*args, **kwargs)
                     
                 except Exception as e:

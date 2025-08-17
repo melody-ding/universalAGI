@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Shield, Calendar, ArrowLeft, FileText, Settings, Edit2, Save, X, AlertCircle } from "lucide-react";
@@ -264,7 +265,7 @@ export default function ComplianceGroupDetailPage() {
                 <div className="md:col-span-2">
                   <label className="text-sm font-medium text-gray-700">Description</label>
                   {isEditing ? (
-                    <Input
+                    <Textarea
                       value={editForm.description}
                       onChange={(e) => setEditForm(prev => ({ ...prev, description: e.target.value }))}
                       placeholder="Enter description (optional)"

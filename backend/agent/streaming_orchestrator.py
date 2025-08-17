@@ -18,7 +18,8 @@ logger = logging.getLogger(__name__)
 async def stream_smart_orchestration(
     query: str, 
     config: Optional[SmartRoutingConfig] = None,
-    document_id: Optional[int] = None
+    document_id: Optional[int] = None,
+    file_context: Optional[Dict[str, Any]] = None
 ) -> AsyncGenerator[str, None]:
     """
     Stream smart orchestrated message handling with real-time progress
@@ -27,6 +28,7 @@ async def stream_smart_orchestration(
         query: User query string
         config: Smart routing configuration (uses default if None)
         document_id: Optional specific document to search
+        file_context: Optional file context for document analysis
         
     Yields:
         SSE formatted progress events
@@ -36,12 +38,22 @@ async def stream_smart_orchestration(
     try:
         logger.info(f"Streaming smart orchestrator processing: {query[:100]}...")
         
-        # Step 1: Probe analysis
+        # Check for document analysis intent first
+        if file_context:
+            from .file_context import document_analysis_detector
+            
+            should_analyze = document_analysis_detector.should_analyze_document(query, file_context)
+            if should_analyze:
+                logger.info("Document analysis intent detected, routing to analysis workflow")
+                async for event in _stream_document_analysis(query, file_context):
+                    yield event
+                return
+        
+        # Step 1: Probe analysis for regular chat
         yield f"data: {json.dumps({'type': 'thinking_step', 'content': 'Analyzing query patterns...', 'step': 1})}\n\n"
         
         signals = compute_probe_signals(query, config)
         
-        yield f"data: {json.dumps({'type': 'thinking_step', 'content': 'Determining search strategy...', 'step': 2})}\n\n"
         
         score = compute_routing_score(signals, config)
         
@@ -294,3 +306,49 @@ def _should_escalate_from_short(
         logger.info(f"Escalating SHORT->LONG: {', '.join(reasons)}")
     
     return should_escalate
+
+
+async def _stream_document_analysis(query: str, file_context: Dict[str, Any]) -> AsyncGenerator[str, None]:
+    """Stream document analysis workflow with progress updates."""
+    try:
+        logger.info(f"Starting document analysis for: {file_context.get('filename', 'unknown file')}")
+        
+        # Step 1: Initialize analysis
+        yield f"data: {json.dumps({'type': 'thinking_step', 'content': 'Preparing document analysis...', 'step': 1})}\n\n"
+        
+        # Import analysis tool
+        from .document_analysis_tool import DocumentAnalysisTool
+        
+        # Step 2: Parse document
+        filename = file_context.get('filename', 'document')
+        yield f"data: {json.dumps({'type': 'thinking_step', 'content': f'Parsing document: {filename}...', 'step': 2})}\n\n"
+        
+        # Step 3: Find frameworks
+        yield f"data: {json.dumps({'type': 'thinking_step', 'content': 'Finding relevant compliance frameworks...', 'step': 3})}\n\n"
+        
+        # Step 4: Run analysis
+        yield f"data: {json.dumps({'type': 'thinking_step', 'content': 'Running compliance analysis...', 'step': 4})}\n\n"
+        
+        # Execute analysis
+        analysis_tool = DocumentAnalysisTool()
+        analysis_parameters = {
+            'file_content': file_context.get('file_content'),
+            'filename': file_context.get('filename', 'document'),
+            'file_text': file_context.get('file_text'),
+            'framework_ids': file_context.get('framework_ids')
+        }
+        
+        result = await analysis_tool.execute(analysis_parameters)
+        
+        # Step 5: Complete
+        yield f"data: {json.dumps({'type': 'thinking_complete', 'content': 'Document analysis complete', 'execution_summary': {'path': 'DOCUMENT_ANALYSIS', 'filename': file_context.get('filename')}})}\n\n"
+        
+        # Return formatted result
+        yield f"data: {json.dumps({'type': 'response_complete', 'content': result})}\n\n"
+        
+        logger.info("Document analysis completed successfully")
+        
+    except Exception as e:
+        logger.error(f"Document analysis failed: {str(e)}")
+        error_message = f"Document analysis failed: {str(e)}"
+        yield f"data: {json.dumps({'type': 'error', 'content': error_message})}\n\n"

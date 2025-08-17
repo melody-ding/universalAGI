@@ -36,6 +36,7 @@ async def send_message_stream(
     message: str = Form(""),
     conversation_history: str = Form("[]"),
     image: UploadFile = File(None),
+    document_file: UploadFile = File(None),
     document_id: int = Form(None)
 ):
     start_time = time.time()
@@ -47,6 +48,7 @@ async def send_message_stream(
             extra_fields={
                 "message_length": len(message),
                 "has_image": image is not None,
+                "has_document": document_file is not None,
                 "history_length": len(conversation_history) if conversation_history else 0,
                 "document_id": document_id
             }
@@ -57,8 +59,8 @@ async def send_message_stream(
             raise ConfigurationError("OPENAI_API_KEY", "OpenAI API key not configured")
         
         # Validate input
-        if not message.strip() and not image:
-            raise ValidationError("Message or image required")
+        if not message.strip() and not image and not document_file:
+            raise ValidationError("Message, image, or document file required")
         
         # Parse conversation history from JSON string
         try:
@@ -69,9 +71,34 @@ async def send_message_stream(
             logger.warning(f"Failed to parse conversation history: {e}")
             history = []
         
+        # Read files immediately to prevent closure issues
+        image_content = None
+        document_content = None
+        
+        if image and image.filename:
+            try:
+                image_content = await image.read()
+                logger.info(f"Read image file: {image.filename} ({len(image_content)} bytes)")
+            except Exception as e:
+                logger.error(f"Failed to read image file: {str(e)}")
+                raise ValidationError(f"Failed to read image file: {str(e)}")
+        
+        if document_file and document_file.filename:
+            try:
+                document_content = await document_file.read()
+                logger.info(f"Read document file: {document_file.filename} ({len(document_content)} bytes)")
+            except Exception as e:
+                logger.error(f"Failed to read document file: {str(e)}")
+                raise ValidationError(f"Failed to read document file: {str(e)}")
+        
         async def safe_streaming_generator():
             try:
-                async for chunk in chat_service.get_streaming_response(message, history, image, document_id):
+                async for chunk in chat_service.get_streaming_response(
+                    message, history, 
+                    (image, image_content) if image_content else None, 
+                    (document_file, document_content) if document_content else None, 
+                    document_id
+                ):
                     yield chunk
                 logger.info("Streaming completed successfully")
                 yield f"data: [DONE]\n\n"
@@ -932,3 +959,53 @@ async def evaluate_document(
             exc_info=True
         )
         raise ProcessingError("document_evaluation", "evaluation_processing", str(e))
+
+@router.post("/debug-framework-matching")
+async def debug_framework_matching(file: UploadFile = File(...)):
+    """Debug endpoint to show framework matching details."""
+    start_time = time.time()
+    logger = get_logger(__name__)
+    
+    try:
+        logger.info("Received framework matching debug request")
+        
+        # Validate file
+        if not file:
+            raise ValidationError("No file provided")
+        
+        if not file.filename:
+            raise ValidationError("File must have a filename")
+        
+        # Read and parse file
+        file_content = await file.read()
+        
+        # Parse document
+        from services.document_parser import document_parser
+        file_stream = io.BytesIO(file_content)
+        document_text = document_parser.parse_document(file_stream, file.filename)
+        
+        if not document_text.strip():
+            raise ValidationError("Document appears to be empty or could not be parsed")
+        
+        # Run debug analysis
+        from services.framework_matcher import framework_matcher
+        debug_info = await framework_matcher.debug_framework_matching(document_text)
+        
+        logger.info("Framework matching debug completed")
+        
+        # Log successful request
+        duration = time.time() - start_time
+        log_request(logger, "POST", "/debug-framework-matching", 200, duration)
+        
+        return debug_info
+        
+    except (UserError, ValidationError):
+        raise
+    except Exception as e:
+        duration = time.time() - start_time
+        logger.error(
+            f"Error in framework matching debug: {str(e)}",
+            extra_fields={"duration": duration, "filename": file.filename if file else None},
+            exc_info=True
+        )
+        raise ProcessingError("framework_debug", "debug_processing", str(e))

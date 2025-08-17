@@ -7,16 +7,16 @@ import { useStreamingChat } from "@/hooks/useStreamingChat";
 
 export default function ChatPage() {
   const [inputText, setInputText] = useState("");
-  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [selectedDocument, setSelectedDocument] = useState<File | null>(null);
   const { messages, isProcessing, sendMessage } = useStreamingChat();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputText.trim() && !selectedImage) return;
+    if (!inputText.trim() && !selectedDocument) return;
 
-    await sendMessage(inputText, selectedImage || undefined);
+    await sendMessage(inputText, undefined, selectedDocument || undefined);
     setInputText("");
-    setSelectedImage(null);
+    setSelectedDocument(null);
   };
 
   return (
@@ -25,8 +25,8 @@ export default function ChatPage() {
       <ChatInput
         inputText={inputText}
         setInputText={setInputText}
-        selectedImage={selectedImage}
-        setSelectedImage={setSelectedImage}
+        selectedDocument={selectedDocument}
+        setSelectedDocument={setSelectedDocument}
         isProcessing={isProcessing}
         onSubmit={handleSubmit}
       />

@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Amazon Cortex",
+  title: "Amazon Product Guardian",
   description: "Manage your compliance documents and rules with AI",
 };
 

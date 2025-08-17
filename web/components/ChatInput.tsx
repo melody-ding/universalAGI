@@ -7,8 +7,8 @@ import { Input } from "@/components/ui/input";
 interface ChatInputProps {
   inputText: string;
   setInputText: (text: string) => void;
-  selectedImage: File | null;
-  setSelectedImage: (file: File | null) => void;
+  selectedDocument: File | null;
+  setSelectedDocument: (file: File | null) => void;
   isProcessing: boolean;
   onSubmit: (e: React.FormEvent) => void;
 }
@@ -16,28 +16,30 @@ interface ChatInputProps {
 export function ChatInput({
   inputText,
   setInputText,
-  selectedImage,
-  setSelectedImage,
+  selectedDocument,
+  setSelectedDocument,
   isProcessing,
   onSubmit
 }: ChatInputProps) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const documentInputRef = useRef<HTMLInputElement>(null);
 
-  const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDocumentSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file && file.type.startsWith('image/')) {
-      setSelectedImage(file);
+    if (file && file.type === 'application/pdf') {
+      setSelectedDocument(file);
+    } else if (file) {
+      alert('Please select a PDF file');
     }
   };
 
-  const handleImageButtonClick = () => {
-    fileInputRef.current?.click();
+  const handleDocumentButtonClick = () => {
+    documentInputRef.current?.click();
   };
 
-  const removeSelectedImage = () => {
-    setSelectedImage(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+  const removeSelectedDocument = () => {
+    setSelectedDocument(null);
+    if (documentInputRef.current) {
+      documentInputRef.current.value = '';
     }
   };
 
@@ -51,14 +53,14 @@ export function ChatInput({
             placeholder="Type your message..."
             disabled={isProcessing}
           />
-          {selectedImage && (
+          {selectedDocument && (
             <div className="flex items-center space-x-2 text-sm text-gray-600">
-              <span>Selected: {selectedImage.name}</span>
+              <span>Selected PDF: {selectedDocument.name}</span>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={removeSelectedImage}
+                onClick={removeSelectedDocument}
                 className="h-6 px-2"
               >
                 Remove
@@ -70,22 +72,22 @@ export function ChatInput({
           <Button
             type="button"
             variant="outline"
-            onClick={handleImageButtonClick}
+            onClick={handleDocumentButtonClick}
             disabled={isProcessing}
             className="px-3"
           >
-            📷
+            📄
           </Button>
-          <Button type="submit" disabled={isProcessing || (!inputText.trim() && !selectedImage)}>
+          <Button type="submit" disabled={isProcessing || (!inputText.trim() && !selectedDocument)}>
             {isProcessing ? "Sending..." : "Send"}
           </Button>
         </div>
       </form>
       <input
-        ref={fileInputRef}
+        ref={documentInputRef}
         type="file"
-        accept="image/*"
-        onChange={handleImageSelect}
+        accept="application/pdf"
+        onChange={handleDocumentSelect}
         className="hidden"
       />
     </div>

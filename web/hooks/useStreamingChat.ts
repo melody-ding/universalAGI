@@ -154,7 +154,7 @@ export function useStreamingChat() {
     });
   }, []);
 
-  const sendMessage = useCallback(async (text: string, image?: File) => {
+  const sendMessage = useCallback(async (text: string, image?: File, document?: File) => {
     const userMessage: Message = {
       id: messageIdCounter.current++,
       text,
@@ -166,8 +166,8 @@ export function useStreamingChat() {
 
     const formData = new FormData();
     formData.append('message', text);
-    if (image) {
-      formData.append('image', image);
+    if (document) {
+      formData.append('document_file', document);
     }
 
     try {
