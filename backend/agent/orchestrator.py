@@ -16,9 +16,9 @@ Usage:
 
 import logging
 import json
-import os
 from typing import Dict, Any
 from openai import OpenAI
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ def route_message(user_text: str) -> Dict[str, Any]:
     Raises:
         ValueError: If JSON parsing fails or required fields are missing
     """
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    client = OpenAI(api_key=settings.openai.api_key)
     
     system_prompt = """You are a lightweight orchestrator that routes between simple responses and document-based answers.
 - Output strict JSON only, no prose.
@@ -95,7 +95,7 @@ def run_light_agent(user_text: str, intent: str, query: str, light_draft: str) -
     Returns:
         Brief response (≤2 sentences) or "ESCALATE" if uncertain
     """
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    client = OpenAI(api_key=settings.openai.api_key)
     
     system_prompt = "You are the LIGHT responder. Provide helpful informational responses without tools. For instructional requests (recipes, how-to guides, explanations), provide clear step-by-step information. Keep responses concise but complete. If you cannot provide a satisfactory answer, output exactly: ESCALATE."
     

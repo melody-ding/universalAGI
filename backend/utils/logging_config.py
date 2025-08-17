@@ -290,20 +290,28 @@ def log_error_with_context(logger: ContextLogger, error: Exception, context: Dic
 # Initialize logging on module import
 def initialize_logging():
     """Initialize logging with default configuration."""
-    # Check environment for logging configuration
-    import os
-    
-    log_level = os.getenv("LOG_LEVEL", "INFO")
-    log_format = os.getenv("LOG_FORMAT", "json")
-    log_file = os.getenv("LOG_FILE")
-    enable_console = os.getenv("LOG_CONSOLE", "true").lower() == "true"
-    
-    setup_logging(
-        log_level=log_level,
-        log_format=log_format,
-        log_file=log_file,
-        enable_console=enable_console
-    )
+    try:
+        from config import settings
+        setup_logging(
+            log_level=settings.logging.level.value,
+            log_format=settings.logging.format.value,
+            log_file=settings.logging.file_path,
+            enable_console=settings.logging.enable_console
+        )
+    except ImportError:
+        # Fallback to environment variables if config is not available
+        import os
+        log_level = os.getenv("LOG_LEVEL", "INFO")
+        log_format = os.getenv("LOG_FORMAT", "json")
+        log_file = os.getenv("LOG_FILE")
+        enable_console = os.getenv("LOG_CONSOLE", "true").lower() == "true"
+        
+        setup_logging(
+            log_level=log_level,
+            log_format=log_format,
+            log_file=log_file,
+            enable_console=enable_console
+        )
 
 
 # Auto-initialize when module is imported

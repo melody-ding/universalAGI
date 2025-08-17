@@ -55,7 +55,9 @@ class ReActAgent:
     def __init__(self, 
                  model_name: str = None,
                  planner_temperature: float = 0.1,
-                 executor_temperature: float = None):
+                 executor_temperature: float = None,
+                 planner: Optional[Planner] = None,
+                 executor: Optional[Executor] = None):
         """
         Initialize the ReAct Agent
         
@@ -63,9 +65,11 @@ class ReActAgent:
             model_name: LLM model to use
             planner_temperature: Temperature for planning (lower = more consistent)
             executor_temperature: Temperature for execution (higher = more creative)
+            planner: Optional injected planner instance
+            executor: Optional injected executor instance
         """
-        self.planner = Planner(model_name, planner_temperature)
-        self.executor = Executor(model_name, executor_temperature)
+        self.planner = planner or Planner(model_name, planner_temperature)
+        self.executor = executor or Executor(model_name, executor_temperature)
         self.session_history = []
         
     async def process_request(self, 
@@ -267,6 +271,13 @@ class ReActAgent:
         system_prompt = """You are an expert reasoning assistant. You have just completed detailed internal reasoning about the user's request and executed a comprehensive plan. 
 
 Now provide your final, well-reasoned response that addresses their question comprehensively based on your analysis and execution results. Be clear, helpful, and direct.
+
+MANDATORY CITATION RULES:
+- For every fact from retrieved documents, use citation tokens: [[doc:X, seg:Y]] where X is document ID and Y is segment ordinal
+- Look for document context in format: {Document Title} [Document ID: X] and snippets with [§ordinal]
+- Use the EXACT Document ID from brackets and EXACT segment ordinal from [§ordinal]
+- Example: If you see "{Document ABC} [Document ID: 456]" and "[§7] Some text", cite as [[doc:456, seg:7]]
+- Always include citation tokens for verifiable facts from documents
 
 Do not mention the internal planning or execution process - just provide the final answer as if you reasoned through it naturally."""
         

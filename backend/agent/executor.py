@@ -47,16 +47,17 @@ class ExecutionResult:
 class Executor:
     """Executes individual steps of execution plans using available tools"""
     
-    def __init__(self, model_name: str = None, temperature: float = None):
+    def __init__(self, model_name: str = None, temperature: float = None, tools: Optional[Dict[str, Tool]] = None):
         self.llm = ChatOpenAI(
             model=model_name or settings.MODEL_NAME,
             temperature=temperature or settings.MODEL_TEMPERATURE,
             openai_api_key=settings.OPENAI_API_KEY
         )
-        self.tools = self._initialize_tools()
+        self.tools = tools or self._initialize_tools()
 
     def _initialize_tools(self) -> Dict[str, Tool]:
         """Initialize available tools for RAG-only execution"""
+        # Use dependency injection for tool creation
         return {
             "search_documents": RAGTool()
         }

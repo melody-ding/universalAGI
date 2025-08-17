@@ -8,9 +8,10 @@ import { ExternalLink, Eye, Copy, Check } from "lucide-react";
 
 interface CitationFootnotesProps {
   citations: CitationInfo[];
+  messageId?: string;
 }
 
-export function CitationFootnotes({ citations }: CitationFootnotesProps) {
+export function CitationFootnotes({ citations, messageId = "default" }: CitationFootnotesProps) {
   const [expandedCitations, setExpandedCitations] = useState<Set<number>>(new Set());
   const [copiedCitations, setCopiedCitations] = useState<Set<number>>(new Set());
 
@@ -58,10 +59,12 @@ export function CitationFootnotes({ citations }: CitationFootnotesProps) {
             ? `${docId}-${segOrdinal}-${citation.index}`
             : `citation-${citation.index || index}`;
           
+          const uniqueCitationId = `${messageId}-citation-${citation.index || index + 1}`;
+          
           return (
             <Card 
               key={safeKey}
-              id={`citation-${citation.index || index + 1}`}
+              id={uniqueCitationId}
               className="text-xs scroll-mt-4"
             >
               <CardHeader className="pb-2">

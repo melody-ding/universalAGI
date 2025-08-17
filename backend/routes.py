@@ -30,6 +30,26 @@ class DocumentComplianceFrameworkUpdateRequest(BaseModel):
 async def root():
     return {"message": "Chat Backend API is running"}
 
+@router.get("/health")
+async def health_check():
+    """Health check endpoint for load balancers and monitoring"""
+    try:
+        # Basic health check - can be expanded to check database connectivity
+        return {
+            "status": "healthy",
+            "timestamp": time.time(),
+            "version": "1.0.0",
+            "environment": settings.environment.value
+        }
+    except Exception as e:
+        logger = get_logger(__name__)
+        logger.error(f"Health check failed: {str(e)}")
+        return {
+            "status": "unhealthy",
+            "timestamp": time.time(),
+            "error": str(e)
+        }
+
 
 @router.post("/send-message-stream")
 async def send_message_stream(

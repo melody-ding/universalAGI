@@ -1,5 +1,4 @@
 import boto3
-import os
 import time
 from typing import List, Optional, Dict, Any
 from database.models import DocumentModel, DocumentSegmentModel, ComplianceGroupModel
@@ -7,6 +6,7 @@ from services.embedding_service import embedding_service
 from utils.logging_config import get_logger, log_database_operation
 from utils.retry import retry_database_operation
 from utils.exceptions import DatabaseError, ConnectionError, create_database_error
+from config import settings
 
 logger = get_logger(__name__)
 
@@ -14,13 +14,13 @@ class PostgresClient:
     def __init__(self):
         self.rds_client = boto3.client(
             'rds-data',
-            aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
-            aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
-            region_name=os.getenv('AWS_REGION', 'us-east-1')
+            aws_access_key_id=settings.aws.access_key_id,
+            aws_secret_access_key=settings.aws.secret_access_key,
+            region_name=settings.aws.region
         )
-        self.database_arn = os.getenv('RDS_CLUSTER_ARN')
-        self.secret_arn = os.getenv('RDS_SECRET_ARN')
-        self.database_name = os.getenv('RDS_DATABASE_NAME', 'postgres')
+        self.database_arn = settings.database.cluster_arn
+        self.secret_arn = settings.database.secret_arn
+        self.database_name = settings.database.database_name
     
     @retry_database_operation("execute_statement")
     def execute_statement(self, sql: str, parameters: List = None):
@@ -346,7 +346,7 @@ class PostgresClient:
     def get_all_compliance_groups(self) -> List[ComplianceGroupModel]:
         """Get all compliance groups from the database."""
         response = self.execute_statement(
-            "SELECT id, name, description, embedding, created_at, updated_at FROM compliance_frameworks ORDER BY created_at DESC"
+            "SELECT id, name, description, created_at, updated_at FROM compliance_frameworks ORDER BY created_at DESC"
         )
         
         compliance_groups = []
@@ -355,34 +355,25 @@ class PostgresClient:
             created_at = None
             updated_at = None
             
-            if len(record) > 4 and record[4].get('stringValue'):
+            if len(record) > 3 and record[3].get('stringValue'):
                 from datetime import datetime
                 try:
-                    created_at = datetime.fromisoformat(record[4]['stringValue'].replace('Z', '+00:00'))
+                    created_at = datetime.fromisoformat(record[3]['stringValue'].replace('Z', '+00:00'))
                 except:
                     created_at = None
             
-            if len(record) > 5 and record[5].get('stringValue'):
+            if len(record) > 4 and record[4].get('stringValue'):
                 from datetime import datetime
                 try:
-                    updated_at = datetime.fromisoformat(record[5]['stringValue'].replace('Z', '+00:00'))
+                    updated_at = datetime.fromisoformat(record[4]['stringValue'].replace('Z', '+00:00'))
                 except:
                     updated_at = None
-            
-            # Parse embedding if present
-            embedding = None
-            if len(record) > 3 and record[3].get('stringValue'):
-                try:
-                    import json
-                    embedding = json.loads(record[3]['stringValue'])
-                except:
-                    embedding = None
             
             compliance_groups.append(ComplianceGroupModel(
                 id=record[0].get('stringValue'),  # UUID is string value
                 name=record[1].get('stringValue'),
                 description=record[2].get('stringValue'),
-                embedding=embedding,
+                embedding=None,  # Skip embedding parsing for listing - reduces response size
                 created_at=created_at,
                 updated_at=updated_at
             ))

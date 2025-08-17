@@ -8,9 +8,12 @@ import { CitationInfo } from "@/lib/citations";
 interface MessageWithCitationsProps {
   content: string;
   className?: string;
+  messageId?: string; // Unique identifier for this message
 }
 
-export function MessageWithCitations({ content, className = "" }: MessageWithCitationsProps) {
+export function MessageWithCitations({ content, className = "", messageId }: MessageWithCitationsProps) {
+  // Generate a unique message ID if not provided
+  const uniqueMessageId = messageId || `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   const [citations, setCitations] = useState<CitationInfo[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -71,15 +74,15 @@ export function MessageWithCitations({ content, className = "" }: MessageWithCit
     processCitations();
   }, [content]);
 
-  // Create a wrapper that adds click handlers after markdown rendering
+  // Create a wrapper that processes citations in a simple, reliable way
   const CitationWrapper = ({ content }: { content: string }) => {
-    // Parse citation tokens and replace with simple numbered markers for markdown
+    // Parse citation tokens and replace with simple numbered markers
     const citationRegex = /\[\[doc:(\d+),\s*seg:(\d+)\]\]/g;
     const seenCitations = new Map<string, number>();
     let citationCounter = 1;
     
-    // Replace citation tokens with simple markers that markdown won't interfere with
-    const markdownContent = content.replace(citationRegex, (match, docId, segId) => {
+    // Replace citation tokens with simple clickable spans using unique message-scoped IDs
+    const processedContent = content.replace(citationRegex, (match, docId, segId) => {
       const citationKey = `${docId}-${segId}`;
       
       if (!seenCitations.has(citationKey)) {
@@ -87,72 +90,76 @@ export function MessageWithCitations({ content, className = "" }: MessageWithCit
       }
       
       const citationNumber = seenCitations.get(citationKey);
-      return `[${citationNumber}]`;
+      const uniqueCitationId = `${uniqueMessageId}-citation-${citationNumber}`;
+      return `<sup class="citation-marker" data-citation="${citationNumber}" data-message-id="${uniqueMessageId}" style="color: #2563eb; cursor: pointer; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 0.75rem; margin-left: 0.125rem; padding: 0.125rem 0.25rem; border-radius: 0.25rem; transition: all 0.2s ease; background-color: rgba(37, 99, 235, 0.1);">[${citationNumber}]</sup>`;
     });
 
-    // Use useEffect to add click handlers after the component mounts
+    const handleCitationClick = (citationNumber: string) => {
+      const uniqueCitationId = `${uniqueMessageId}-citation-${citationNumber}`;
+      console.log(`Citation ${citationNumber} clicked for message ${uniqueMessageId}`);
+      console.log('Looking for element with ID:', uniqueCitationId);
+      console.log('Available citations:', citations.map((c: any) => c.index));
+      
+      const citationElement = document.getElementById(uniqueCitationId);
+      console.log('Citation element found:', citationElement);
+      
+      if (citationElement) {
+        citationElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        citationElement.classList.add('highlight-citation');
+        setTimeout(() => {
+          citationElement.classList.remove('highlight-citation');
+        }, 2000);
+      } else {
+        console.warn(`Citation element with ID ${uniqueCitationId} not found`);
+        // Try again after a short delay in case footnotes are still rendering
+        setTimeout(() => {
+          const retryElement = document.getElementById(uniqueCitationId);
+          if (retryElement) {
+            retryElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            retryElement.classList.add('highlight-citation');
+            setTimeout(() => {
+              retryElement.classList.remove('highlight-citation');
+            }, 2000);
+          }
+        }, 500);
+      }
+    };
+
+    // Add click handlers after component mounts - only for citations in this message
     useEffect(() => {
-      const addClickHandlers = () => {
-        const citationElements = document.querySelectorAll('.citation-marker-processed');
+      const citationElements = document.querySelectorAll(`.citation-marker[data-message-id="${uniqueMessageId}"]`);
+      citationElements.forEach((element) => {
+        const citationNumber = element.getAttribute('data-citation');
+        if (citationNumber) {
+          const clickHandler = (e: Event) => {
+            e.preventDefault();
+            handleCitationClick(citationNumber);
+          };
+          element.addEventListener('click', clickHandler);
+          
+          // Store handler for cleanup
+          (element as any)._clickHandler = clickHandler;
+        }
+      });
+
+      // Cleanup function
+      return () => {
+        const citationElements = document.querySelectorAll(`.citation-marker[data-message-id="${uniqueMessageId}"]`);
         citationElements.forEach((element) => {
-          const citationNumber = element.getAttribute('data-citation');
-          if (citationNumber) {
-            element.addEventListener('click', (e) => {
-              e.preventDefault();
-              console.log(`Citation ${citationNumber} clicked`);
-              console.log('Looking for element with ID:', `citation-${citationNumber}`);
-              console.log('Available citations:', citations.map(c => c.index));
-              console.log('All elements with citation IDs:', Array.from(document.querySelectorAll('[id^="citation-"]')).map(el => el.id));
-              const citationElement = document.getElementById(`citation-${citationNumber}`);
-              console.log('Citation element found:', citationElement);
-              if (citationElement) {
-                citationElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                citationElement.classList.add('highlight-citation');
-                setTimeout(() => {
-                  citationElement.classList.remove('highlight-citation');
-                }, 2000);
-              } else {
-                console.warn(`Citation element with ID citation-${citationNumber} not found`);
-                // Try again after a short delay in case footnotes are still rendering
-                setTimeout(() => {
-                  const retryElement = document.getElementById(`citation-${citationNumber}`);
-                  console.log('Retry - Citation element found:', retryElement);
-                  if (retryElement) {
-                    retryElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    retryElement.classList.add('highlight-citation');
-                    setTimeout(() => {
-                      retryElement.classList.remove('highlight-citation');
-                    }, 2000);
-                  }
-                }, 500);
-              }
-            });
+          if ((element as any)._clickHandler) {
+            element.removeEventListener('click', (element as any)._clickHandler);
+            delete (element as any)._clickHandler;
           }
         });
       };
-
-      // Process citations after the component renders
-      const timer = setTimeout(() => {
-        const container = document.querySelector('.citation-container');
-        if (container) {
-          const textContent = container.innerHTML;
-          
-          // Replace [1], [2], etc. with clickable elements
-          const processedHTML = textContent.replace(/\[(\d+)\]/g, (match, num) => {
-            return `<sup class="citation-marker-processed" data-citation="${num}" style="color: #2563eb; cursor: pointer; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 0.75rem; margin-left: 0.125rem; padding: 0.125rem 0.25rem; border-radius: 0.25rem; transition: all 0.2s ease;">[${num}]</sup>`;
-          });
-          
-          container.innerHTML = processedHTML;
-          addClickHandlers();
-        }
-      }, 100);
-
-      return () => clearTimeout(timer);
-    }, [content]);
+    }, [processedContent, citations, uniqueMessageId]);
 
     return (
       <div className="citation-container">
-        <MarkdownMessage content={markdownContent} />
+        <div 
+          className="prose prose-sm max-w-none"
+          dangerouslySetInnerHTML={{ __html: processedContent }}
+        />
       </div>
     );
   };
@@ -171,18 +178,19 @@ export function MessageWithCitations({ content, className = "" }: MessageWithCit
 
   const renderContent = () => {
     if (!content.includes('[[doc:')) {
-      console.log('No citations found in content:', content);
+      console.log('No citations found in content:', content.substring(0, 100) + '...');
       return <MarkdownMessage content={content} />;
     }
 
-    console.log('Processing content with citations:', content);
+    console.log('Processing content with citations:', content.substring(0, 100) + '...');
+    console.log('Citation tokens found:', content.match(/\[\[doc:\d+,\s*seg:\d+\]\]/g) || []);
     return <CitationWrapper content={content} />;
   };
 
   return (
     <div className={className}>
       {renderContent()}
-      <CitationFootnotes citations={citations} />
+      <CitationFootnotes citations={citations} messageId={uniqueMessageId} />
       
       {/* Add CSS for citation highlighting */}
       <style jsx>{`
@@ -192,7 +200,7 @@ export function MessageWithCitations({ content, className = "" }: MessageWithCit
           border-radius: 4px;
           padding: 2px 4px;
         }
-        :global(.citation-marker-processed:hover) {
+        :global(.citation-marker:hover) {
           color: #1d4ed8 !important;
           background-color: #dbeafe !important;
         }

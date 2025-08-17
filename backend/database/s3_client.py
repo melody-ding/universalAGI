@@ -1,18 +1,18 @@
 import boto3
 import hashlib
-import os
 from typing import BinaryIO
 from botocore.exceptions import ClientError
+from config import settings
 
 class S3Client:
     def __init__(self):
         self.s3_client = boto3.client(
             's3',
-            aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
-            aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
-            region_name=os.getenv('AWS_REGION', 'us-east-1')
+            aws_access_key_id=settings.aws.access_key_id,
+            aws_secret_access_key=settings.aws.secret_access_key,
+            region_name=settings.aws.region
         )
-        self.bucket_name = os.getenv('S3_BUCKET_NAME')
+        self.bucket_name = settings.aws.s3_bucket_name
     
     def compute_file_hash(self, file_stream: BinaryIO) -> str:
         """Compute SHA-256 hash of file stream without loading entire file into memory."""

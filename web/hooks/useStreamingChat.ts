@@ -15,6 +15,11 @@ interface Message {
   sender: 'user' | 'bot';
   thinkingSteps?: ThinkingStep[];
   isThinking?: boolean;
+  attachedFile?: {
+    name: string;
+    size: number;
+    type: string;
+  };
 }
 
 export function useStreamingChat() {
@@ -158,7 +163,12 @@ export function useStreamingChat() {
     const userMessage: Message = {
       id: messageIdCounter.current++,
       text,
-      sender: 'user'
+      sender: 'user',
+      attachedFile: document ? {
+        name: document.name,
+        size: document.size,
+        type: document.type
+      } : undefined
     };
 
     setMessages(prev => [...prev, userMessage]);

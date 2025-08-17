@@ -21,6 +21,11 @@ interface Message {
   sender: 'user' | 'bot';
   thinkingSteps?: ThinkingStep[];
   isThinking?: boolean;
+  attachedFile?: {
+    name: string;
+    size: number;
+    type: string;
+  };
 }
 
 interface DocumentChatPanelProps {
@@ -224,6 +229,13 @@ export function DocumentChatPanel({ isOpen, onClose, documentId, documentTitle }
                     message.sender === 'user' ? 'ml-auto bg-blue-50' : 'mr-auto bg-gray-50'
                   } max-w-3xl rounded-lg border p-4`}>
                     <div className="flex flex-col space-y-3">
+                      {message.sender === 'user' && message.attachedFile && (
+                        <div className="mb-2 flex items-center space-x-2 text-sm text-gray-600 bg-blue-100 p-2 rounded-md">
+                          <span className="text-blue-600">📎</span>
+                          <span className="font-medium">{message.attachedFile.name}</span>
+                          <span className="text-gray-500">({(message.attachedFile.size / 1024 / 1024).toFixed(1)} MB)</span>
+                        </div>
+                      )}
                       {message.sender === 'bot' && message.thinkingSteps && message.thinkingSteps.length > 0 && (
                         <ThinkingSteps 
                           steps={message.thinkingSteps} 
@@ -231,7 +243,7 @@ export function DocumentChatPanel({ isOpen, onClose, documentId, documentTitle }
                           isComplete={!message.isThinking && message.text.length > 0}
                         />
                       )}
-                      <MessageWithCitations content={message.text} />
+                      <MessageWithCitations content={message.text} messageId={message.id.toString()} />
                     </div>
                   </div>
                 )}

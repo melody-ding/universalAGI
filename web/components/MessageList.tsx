@@ -17,6 +17,11 @@ interface Message {
   sender: 'user' | 'bot';
   thinkingSteps?: ThinkingStep[];
   isThinking?: boolean;
+  attachedFile?: {
+    name: string;
+    size: number;
+    type: string;
+  };
 }
 
 interface MessageListProps {
@@ -45,6 +50,13 @@ export function MessageList({ messages }: MessageListProps) {
                   <CardContent className="p-4">
                     <div className="flex items-start space-x-3">
                       <div className="flex-1">
+                        {message.sender === 'user' && message.attachedFile && (
+                          <div className="mb-2 flex items-center space-x-2 text-sm text-gray-600 bg-blue-100 p-2 rounded-md">
+                            <span className="text-blue-600">📎</span>
+                            <span className="font-medium">{message.attachedFile.name}</span>
+                            <span className="text-gray-500">({(message.attachedFile.size / 1024 / 1024).toFixed(1)} MB)</span>
+                          </div>
+                        )}
                         {message.sender === 'bot' && message.thinkingSteps && message.thinkingSteps.length > 0 && (
                           <ThinkingSteps 
                             steps={message.thinkingSteps} 
@@ -52,7 +64,7 @@ export function MessageList({ messages }: MessageListProps) {
                             isComplete={!message.isThinking && message.text.length > 0}
                           />
                         )}
-                        <MessageWithCitations content={message.text} />
+                        <MessageWithCitations content={message.text} messageId={message.id.toString()} />
                       </div>
                     </div>
                   </CardContent>

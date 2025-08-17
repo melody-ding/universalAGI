@@ -9,6 +9,7 @@ from langchain.schema import SystemMessage, HumanMessage
 from config import settings
 from models import Message
 from agent import ReActAgent
+from agent.agent_factory import create_react_agent
 from agent.orchestrator import route_message, run_light_agent
 from agent.smart_orchestrator import smart_handle_message
 import logging
@@ -18,8 +19,8 @@ logger = logging.getLogger(__name__)
 
 class ChatService:
     def __init__(self):
-        # Initialize the main ReAct agent
-        self.agent = ReActAgent(
+        # Initialize the main ReAct agent using dependency injection
+        self.agent = create_react_agent(
             model_name=settings.MODEL_NAME,
             planner_temperature=0.1,  # Lower temperature for consistent planning
             executor_temperature=settings.MODEL_TEMPERATURE  # Normal temperature for execution
