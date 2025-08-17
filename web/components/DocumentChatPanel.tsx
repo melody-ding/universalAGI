@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
 import { ChatInput } from "@/components/ChatInput";
 import { MessageList } from "@/components/MessageList";
-import { MarkdownMessage } from "@/components/MarkdownMessage";
+import { MessageWithCitations } from "@/components/MessageWithCitations";
 import { ThinkingSteps } from "@/components/ThinkingSteps";
 
 // Reuse the same interfaces as the main chat for consistency
@@ -237,7 +237,7 @@ export function DocumentChatPanel({ isOpen, onClose, documentId, documentTitle }
                           isComplete={!message.isThinking && message.text.length > 0}
                         />
                       )}
-                      <MarkdownMessage content={message.text} />
+                      <MessageWithCitations content={message.text} />
                     </div>
                   </div>
                 )}

@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { DocumentUpload } from "@/components/DocumentUpload";
 import { DocumentTable } from "@/components/DocumentTable";
+import { CitationTest } from "@/components/CitationTest";
+import { Button } from "@/components/ui/button";
 import { apiEndpoints } from "@/lib/api";
 
 interface UploadedDocument {
@@ -19,6 +21,7 @@ interface UploadedDocument {
 export default function DocumentsPage() {
   const [uploadedDocuments, setUploadedDocuments] = useState<UploadedDocument[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [showCitationTest, setShowCitationTest] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -90,10 +93,24 @@ export default function DocumentsPage() {
   return (
     <div className="flex flex-col h-full">
       <div className="p-6 border-b">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Documents</h1>
-          <p className="text-gray-600 mt-1">Upload and manage your documents</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Documents</h1>
+            <p className="text-gray-600 mt-1">Upload and manage your documents</p>
+          </div>
+          <Button 
+            onClick={() => setShowCitationTest(!showCitationTest)}
+            variant="outline"
+            className="ml-4"
+          >
+            {showCitationTest ? 'Hide Citation Test' : 'Test Citations'}
+          </Button>
         </div>
+        {showCitationTest && (
+          <div className="mt-6">
+            <CitationTest />
+          </div>
+        )}
       </div>
 
       <div className="flex-1 overflow-hidden">

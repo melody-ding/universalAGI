@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict
 from datetime import datetime
 
 class Message(BaseModel):
@@ -22,3 +22,16 @@ class DocumentUploadResponse(BaseModel):
     num_segments: int
     status: str = "success"
     message: Optional[str] = None
+
+class CitationRequest(BaseModel):
+    citations: List[Dict[str, int]]  # List of {"document_id": int, "segment_ordinal": int}
+
+class CitationInfo(BaseModel):
+    document_id: int
+    segment_ordinal: int
+    text: str
+    document_title: str
+    document_url: str
+
+class CitationResponse(BaseModel):
+    citations: List[CitationInfo]

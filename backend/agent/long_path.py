@@ -249,7 +249,7 @@ def _deduplicate_and_merge_contexts(contexts: List[ContextBundle]) -> ContextBun
     context_parts = []
     for block in merged_blocks:
         if block.snippets:  # Only include blocks with content
-            context_parts.append(f"{{{block.title}}}")
+            context_parts.append(f"{{{block.title}}} [Document ID: {block.document_id}]")
             for snippet in block.snippets:
                 context_parts.append(snippet)
             context_parts.append("")
@@ -297,10 +297,15 @@ async def synthesize_comprehensive_answer(query: str, evidence: EvidenceBundle, 
 SYNTHESIS GUIDELINES:
 - Integrate information from multiple sources coherently
 - Highlight agreements and note any discrepancies between sources
-- Use mandatory citations: {Document Title} [§section] for all facts
+- Use mandatory citation tokens: [[doc:X, seg:Y]] where X is document ID and Y is segment ordinal
+- The context shows documents in format: {Document Title} [Document ID: X]
+- Each snippet shows [§ordinal] followed by text
+- Use the EXACT Document ID shown in brackets and the EXACT segment ordinal from [§ordinal]
+- Example: If you see "{Document ABC} [Document ID: 456]" and "[§7] Some text", cite as [[doc:456, seg:7]]
 - Organize complex information clearly with logical flow
 - Address multiple aspects of the question when relevant
 - Acknowledge limitations if certain aspects lack coverage
+- Always include citation tokens for verifiable facts
 
 Provide a thorough, well-structured answer that demonstrates deep understanding of the retrieved information."""
 
@@ -336,6 +341,14 @@ Quality metrics: avg_vec_sim={evidence.avg_vec_sim:.2f}, fts_hit_rate={evidence.
 {context_summary}
 
 Provide a comprehensive, well-cited answer that synthesizes all relevant information to thoroughly address the question."""
+    
+    # Debug: Log the context being sent to LLM
+    logger.info(f"LONG PATH CONTEXT FOR LLM:\n{merged_context.context_text[:500]}...")
+    logger.info(f"Number of contexts in evidence: {len(evidence.contexts)}")
+    for i, context in enumerate(evidence.contexts):
+        logger.info(f"Context {i}: {len(context.blocks)} blocks")
+        for j, block in enumerate(context.blocks):
+            logger.info(f"  Block {j}: Doc ID {block.document_id}, Title: {block.title}")
 
     messages = [
         SystemMessage(content=system_prompt),

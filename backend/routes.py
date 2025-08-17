@@ -4,7 +4,7 @@ from fastapi import APIRouter, File, UploadFile, Form
 from fastapi.responses import StreamingResponse
 
 from config import settings
-from models import SendMessageResponse, Message
+from models import SendMessageResponse, Message, CitationRequest, CitationResponse, CitationInfo
 from services import chat_service
 from utils.logging_config import get_logger, log_request
 from utils.error_handler import (
@@ -350,3 +350,82 @@ async def delete_document(document_id: int):
             exc_info=True
         )
         raise DatabaseError("DELETE", "documents", e)
+
+@router.post("/resolve-citations")
+async def resolve_citations(request: CitationRequest):
+    """
+    Resolve citation tokens to document URLs and exact text.
+    
+    Takes a list of (document_id, segment_ordinal) pairs and returns
+    the exact text, document title, and URL for each citation.
+    """
+    start_time = time.time()
+    logger = get_logger(__name__)
+    
+    try:
+        from database.postgres_client import postgres_client
+        
+        logger.info(
+            "Resolving citations",
+            extra_fields={"citation_count": len(request.citations)}
+        )
+        
+        resolved_citations = []
+        
+        for citation_ref in request.citations:
+            document_id = citation_ref["document_id"]
+            segment_ordinal = citation_ref["segment_ordinal"]
+            
+            # Get document info
+            document = postgres_client.get_document_by_id(document_id)
+            if not document:
+                logger.warning(f"Document {document_id} not found")
+                continue
+            
+            # Get segment text
+            sql = """
+            SELECT ds.text
+            FROM document_segments ds
+            WHERE ds.document_id = :document_id AND ds.segment_ordinal = :segment_ordinal
+            """
+            parameters = [
+                {'name': 'document_id', 'value': {'longValue': document_id}},
+                {'name': 'segment_ordinal', 'value': {'longValue': segment_ordinal}}
+            ]
+            
+            response = postgres_client.execute_statement(sql, parameters)
+            
+            if response.get('records'):
+                segment_text = response['records'][0][0].get('stringValue', '')
+                
+                citation_info = CitationInfo(
+                    document_id=document_id,
+                    segment_ordinal=segment_ordinal,
+                    text=segment_text,
+                    document_title=document.title,
+                    document_url=f"http://localhost:3000/documents/{document_id}"
+                )
+                resolved_citations.append(citation_info)
+            else:
+                logger.warning(f"Segment {segment_ordinal} not found for document {document_id}")
+        
+        logger.info(
+            "Citations resolved successfully",
+            extra_fields={"resolved_count": len(resolved_citations)}
+        )
+        
+        # Log successful request
+        duration = time.time() - start_time
+        log_request(logger, "POST", "/resolve-citations", 200, duration)
+        
+        return CitationResponse(citations=resolved_citations)
+        
+    except Exception as e:
+        # Log and re-raise unexpected errors
+        duration = time.time() - start_time
+        logger.error(
+            f"Error resolving citations: {str(e)}",
+            extra_fields={"duration": duration},
+            exc_info=True
+        )
+        raise DatabaseError("SELECT", "document_segments", e)

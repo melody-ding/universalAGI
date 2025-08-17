@@ -188,7 +188,7 @@ def _format_context_text(blocks: List[ContextBlock]) -> str:
     context_parts = []
     
     for block in blocks:
-        context_parts.append(f"{{{block.title}}}")
+        context_parts.append(f"{{{block.title}}} [Document ID: {block.document_id}]")
         for snippet in block.snippets:
             context_parts.append(snippet)
         context_parts.append("")  # Empty line between documents

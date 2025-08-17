@@ -268,7 +268,7 @@ async def build_context_short_path(query: str, config: SmartRoutingConfig, docum
         # Step 5: Format context text
         context_parts = []
         for block in blocks:
-            context_parts.append(f"{{{block.title}}}")
+            context_parts.append(f"{{{block.title}}} [Document ID: {block.document_id}]")
             for snippet in block.snippets:
                 context_parts.append(snippet)
             context_parts.append("")  # Empty line between documents
@@ -314,12 +314,16 @@ async def synthesize_answer_short(query: str, context: ContextBundle, config: Sm
     system_prompt = """You are a precise document-based Q&A assistant. Provide direct, well-cited answers using ONLY the retrieved document context.
 
 MANDATORY CITATION RULES:
-- Use format: {Document Title} [§section] for every fact
+- For every fact, use citation tokens: [[doc:X, seg:Y]] where X is document ID and Y is segment ordinal
+- The context shows documents in format: {Document Title} [Document ID: X]
+- Each snippet shows [§ordinal] followed by text
+- Use the EXACT Document ID shown in brackets and the EXACT segment ordinal from [§ordinal]
+- Example: If you see "{Document ABC} [Document ID: 456]" and "[§7] Some text", cite as [[doc:456, seg:7]]
 - Never provide information not explicitly in the context
 - If context is insufficient, clearly state limitations
-- Organize multi-document answers clearly
+- Always include citation tokens for verifiable facts
 
-Be concise, accurate, and always cite your sources."""
+Be concise, accurate, and always cite your sources with the exact token format using real IDs from the context."""
     
     # Add token limit instructions
     system_prompt = add_response_token_limit(system_prompt, config)
@@ -330,6 +334,12 @@ Retrieved Context:
 {context.context_text}
 
 Provide a comprehensive answer based solely on the retrieved context. Use mandatory citations for all facts."""
+    
+    # Debug: Log the context being sent to LLM
+    logger.info(f"SHORT PATH CONTEXT FOR LLM:\n{context.context_text[:500]}...")
+    logger.info(f"Number of context blocks: {len(context.blocks)}")
+    for i, block in enumerate(context.blocks):
+        logger.info(f"Block {i}: Doc ID {block.document_id}, Title: {block.title}")
 
     messages = [
         SystemMessage(content=system_prompt),

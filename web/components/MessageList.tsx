@@ -3,7 +3,7 @@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent } from "@/components/ui/card";
 import { ThinkingSteps } from "@/components/ThinkingSteps";
-import { MarkdownMessage } from "@/components/MarkdownMessage";
+import { MessageWithCitations } from "@/components/MessageWithCitations";
 
 interface ThinkingStep {
   content: string;
@@ -52,7 +52,7 @@ export function MessageList({ messages }: MessageListProps) {
                             isComplete={!message.isThinking && message.text.length > 0}
                           />
                         )}
-                        <MarkdownMessage content={message.text} />
+                        <MessageWithCitations content={message.text} />
                       </div>
                     </div>
                   </CardContent>
