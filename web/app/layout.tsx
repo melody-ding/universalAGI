@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Universal AGI",
-  description: "Universal AGI Chat and Document Management",
+  title: "Amazon Cortex",
+  description: "Manage your compliance documents and rules with AI",
 };
 
 export default function RootLayout({

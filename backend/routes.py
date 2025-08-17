@@ -1,5 +1,6 @@
 import json
 import time
+import io
 from typing import Optional
 from fastapi import APIRouter, File, UploadFile, Form
 from fastapi.responses import StreamingResponse
@@ -7,6 +8,7 @@ from fastapi.responses import StreamingResponse
 from config import settings
 from models import SendMessageResponse, Message, CitationRequest, CitationResponse, CitationInfo
 from database.models import ComplianceGroupCreateRequest, ComplianceGroupUpdateRequest
+from document_evaluation.models import DocumentEvaluationRequest, DocumentEvaluationResponse
 from pydantic import BaseModel
 from services import chat_service
 from utils.logging_config import get_logger, log_request
@@ -778,3 +780,155 @@ async def update_document_compliance_framework(
             exc_info=True
         )
         raise DatabaseError("UPDATE", "documents", e)
+
+@router.get("/compliance-groups/{group_id}/documents")
+async def get_compliance_group_documents(group_id: str):
+    """Get all documents associated with a compliance group."""
+    start_time = time.time()
+    logger = get_logger(__name__)
+    
+    try:
+        from database.postgres_client import postgres_client
+        
+        # Check if compliance group exists
+        compliance_group = postgres_client.get_compliance_group_by_id(group_id)
+        if not compliance_group:
+            raise ResourceNotFoundError("Compliance Group", group_id)
+        
+        # Get documents for this compliance framework
+        documents = postgres_client.get_documents_by_compliance_framework(group_id)
+        
+        # Convert to response format
+        response_data = {
+            "documents": [
+                {
+                    "id": doc.id,
+                    "title": doc.title,
+                    "checksum": doc.checksum,
+                    "blob_link": doc.blob_link,
+                    "created_at": doc.created_at.isoformat() if doc.created_at else None,
+                    "mime_type": doc.mime_type,
+                    "compliance_framework_id": doc.compliance_framework_id
+                }
+                for doc in documents
+            ],
+            "compliance_group": {
+                "id": compliance_group.id,
+                "name": compliance_group.name
+            }
+        }
+        
+        logger.info(
+            "Compliance group documents fetched successfully",
+            extra_fields={"group_id": group_id, "document_count": len(documents)}
+        )
+        
+        # Log successful request
+        duration = time.time() - start_time
+        log_request(logger, "GET", f"/compliance-groups/{group_id}/documents", 200, duration)
+        
+        return response_data
+        
+    except (ResourceNotFoundError):
+        # Re-raise user-facing errors
+        raise
+    except Exception as e:
+        # Log and re-raise unexpected errors
+        duration = time.time() - start_time
+        logger.error(
+            f"Error fetching compliance group documents: {str(e)}",
+            extra_fields={"duration": duration, "group_id": group_id},
+            exc_info=True
+        )
+        raise DatabaseError("SELECT", "documents", e)
+
+@router.post("/evaluate-document")
+async def evaluate_document(
+    file: UploadFile = File(...),
+    framework_id: str = Form(...)
+):
+    """Evaluate a document against compliance rules without persisting it."""
+    start_time = time.time()
+    logger = get_logger(__name__)
+    
+    try:
+        logger.info(
+            "Received document evaluation request",
+            extra_fields={
+                "filename": file.filename,
+                "framework_id": framework_id,
+                "content_type": file.content_type
+            }
+        )
+        
+        # Validate file presence
+        if not file:
+            raise ValidationError("No file provided")
+        
+        # Validate filename
+        if not file.filename:
+            raise ValidationError("File must have a filename")
+        
+        # Validate file type
+        allowed_extensions = {'.pdf', '.docx', '.doc', '.txt'}
+        file_extension = '.' + file.filename.lower().split('.')[-1]
+        if file_extension not in allowed_extensions:
+            raise ValidationError(
+                f"Unsupported file type. Allowed: {', '.join(allowed_extensions)}",
+                {"file_extension": [f"Extension '{file_extension}' is not supported"]}
+            )
+        
+        # Validate framework_id
+        if not framework_id or not framework_id.strip():
+            raise ValidationError("Framework ID is required")
+        
+        # Check if framework exists
+        from database.postgres_client import postgres_client
+        compliance_group = postgres_client.get_compliance_group_by_id(framework_id.strip())
+        if not compliance_group:
+            raise ResourceNotFoundError("Compliance Group", framework_id.strip())
+        
+        # Read file content into memory
+        file_content = await file.read()
+        file_stream = io.BytesIO(file_content)
+        
+        # Evaluate the document
+        from document_evaluation.service import document_evaluation_service
+        result = document_evaluation_service.evaluate_document(
+            file_stream,
+            file.filename,
+            framework_id.strip()
+        )
+        
+        logger.info(
+            "Document evaluation completed",
+            extra_fields={
+                "filename": file.filename,
+                "framework_id": framework_id,
+                "segments_processed": result.segments_processed,
+                "overall_score": result.overall_compliance_score
+            }
+        )
+        
+        # Log successful request
+        duration = time.time() - start_time
+        log_request(logger, "POST", "/evaluate-document", 200, duration)
+        
+        return result
+        
+    except (UserError, ValidationError, ResourceNotFoundError):
+        # Re-raise user-facing errors
+        raise
+    except Exception as e:
+        # Log and re-raise unexpected errors
+        duration = time.time() - start_time
+        logger.error(
+            f"Error evaluating document: {str(e)}",
+            extra_fields={
+                "duration": duration, 
+                "filename": file.filename if file else None,
+                "framework_id": framework_id if 'framework_id' in locals() else None
+            },
+            exc_info=True
+        )
+        raise ProcessingError("document_evaluation", "evaluation_processing", str(e))

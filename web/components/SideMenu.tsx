@@ -7,8 +7,8 @@ import { cn } from "@/lib/utils";
 
 const navigation = [
   { name: "Home", href: "/", icon: Home },
-  { name: "Chat", href: "/chat", icon: MessageSquare },
-  { name: "Documents", href: "/documents", icon: FileText },
+  { name: "AI Corpus Chat", href: "/chat", icon: MessageSquare },
+  { name: "Compliance Documents", href: "/documents", icon: FileText },
   { name: "Compliance Groups", href: "/compliance-groups", icon: Shield },
 ];
 
@@ -18,7 +18,7 @@ export function SideMenu() {
   return (
     <div className="flex h-full w-64 flex-col bg-gray-50 border-r border-gray-200">
       <div className="flex h-16 items-center px-6 border-b border-gray-200">
-        <h1 className="text-xl font-semibold text-gray-900">Universal AGI</h1>
+        <h1 className="text-xl font-semibold text-gray-900">Amazon Cortex</h1>
       </div>
       <nav className="flex-1 space-y-1 px-3 py-4">
         {navigation.map((item) => {

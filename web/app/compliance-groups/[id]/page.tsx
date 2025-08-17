@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Shield, Calendar, ArrowLeft, FileText, Users, Settings, Edit2, Save, X, AlertCircle } from "lucide-react";
-import { complianceGroupsAPI, type ComplianceGroup } from "@/lib/api/compliance-groups";
+import { Shield, Calendar, ArrowLeft, FileText, Settings, Edit2, Save, X, AlertCircle } from "lucide-react";
+import { complianceGroupsAPI, type ComplianceGroup, type ComplianceGroupDocument } from "@/lib/api/compliance-groups";
+import { DocumentAnalysis } from "@/components/analysis/DocumentAnalysis";
 
 export default function ComplianceGroupDetailPage() {
   const params = useParams();
@@ -15,7 +16,9 @@ export default function ComplianceGroupDetailPage() {
   const groupId = params.id as string;
   
   const [group, setGroup] = useState<ComplianceGroup | null>(null);
+  const [documents, setDocuments] = useState<ComplianceGroupDocument[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingDocuments, setIsLoadingDocuments] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -27,6 +30,7 @@ export default function ComplianceGroupDetailPage() {
   useEffect(() => {
     if (groupId) {
       fetchGroup();
+      fetchDocuments();
     }
   }, [groupId]);
 
@@ -45,6 +49,19 @@ export default function ComplianceGroupDetailPage() {
       console.error('Error fetching compliance group:', err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchDocuments = async () => {
+    try {
+      setIsLoadingDocuments(true);
+      const response = await complianceGroupsAPI.getComplianceGroupDocuments(groupId);
+      setDocuments(response.documents);
+    } catch (err) {
+      console.error('Error fetching compliance group documents:', err);
+      // Don't set main error state for documents, just log it
+    } finally {
+      setIsLoadingDocuments(false);
     }
   };
 
@@ -281,52 +298,90 @@ export default function ComplianceGroupDetailPage() {
           {/* Associated Documents Card */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center">
-                <FileText className="h-5 w-5 mr-2 text-blue-600" />
-                Associated Documents
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <FileText className="h-5 w-5 mr-2 text-blue-600" />
+                  Associated Documents
+                  <Badge variant="secondary" className="ml-2">
+                    {documents.length}
+                  </Badge>
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => router.push('/documents')}
+                >
+                  Manage Documents
+                </Button>
               </CardTitle>
               <CardDescription>
                 Documents that are assigned to this compliance group
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="text-center py-8">
-                <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No Documents Yet</h3>
-                <p className="text-gray-600 mb-4">
-                  Documents assigned to this compliance group will appear here
-                </p>
-                <Button variant="outline" onClick={() => router.push('/documents')}>
-                  Go to Documents
-                </Button>
-              </div>
+              {isLoadingDocuments ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                  <p className="text-gray-600">Loading documents...</p>
+                </div>
+              ) : documents.length === 0 ? (
+                <div className="text-center py-8">
+                  <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No Documents Assigned</h3>
+                  <p className="text-gray-600 mb-4">
+                    No documents are currently assigned to this compliance group
+                  </p>
+                  <Button variant="outline" onClick={() => router.push('/documents')}>
+                    Assign Documents
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {documents.map((doc) => (
+                    <div 
+                      key={doc.id} 
+                      className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50"
+                    >
+                      <div className="flex items-center flex-1 min-w-0">
+                        <FileText className="h-4 w-4 text-blue-600 mr-3 flex-shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-gray-900 truncate" title={doc.title}>
+                            {doc.title}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            ID: {doc.id} • {formatDate(doc.created_at)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2 ml-4">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => router.push(`/documents/${doc.id}`)}
+                        >
+                          View
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => window.open(doc.blob_link, '_blank')}
+                        >
+                          Download
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
 
-          {/* Compliance Rules Card (Future Enhancement) */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Users className="h-5 w-5 mr-2 text-blue-600" />
-                Compliance Rules
-              </CardTitle>
-              <CardDescription>
-                Rules and requirements for this compliance framework
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-8">
-                <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Rules Management</h3>
-                <p className="text-gray-600 mb-4">
-                  Compliance rules and requirements will be managed here
-                </p>
-                <Button variant="outline" disabled>
-                  Coming Soon
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          {/* Run Analysis Section */}
+          <DocumentAnalysis 
+            frameworkId={groupId} 
+            frameworkName={group.name} 
+          />
+
         </div>
       </div>
     </div>

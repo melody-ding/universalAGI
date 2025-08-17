@@ -279,6 +279,37 @@ class PostgresClient:
         
         return documents
     
+    def get_documents_by_compliance_framework(self, compliance_framework_id: str) -> List[DocumentModel]:
+        """Get all documents assigned to a specific compliance framework."""
+        response = self.execute_statement(
+            "SELECT id, title, checksum, blob_link, mime_type, created_at, compliance_framework_id FROM documents WHERE compliance_framework_id = :compliance_framework_id::uuid ORDER BY created_at DESC",
+            [{'name': 'compliance_framework_id', 'value': {'stringValue': compliance_framework_id}}]
+        )
+        
+        documents = []
+        for record in response['records']:
+            # Parse created_at datetime from string if present
+            created_at = None
+            if len(record) > 5 and record[5].get('stringValue'):
+                from datetime import datetime
+                try:
+                    created_at = datetime.fromisoformat(record[5]['stringValue'].replace('Z', '+00:00'))
+                except:
+                    created_at = None
+            
+            documents.append(DocumentModel(
+                id=record[0].get('longValue'),
+                title=record[1].get('stringValue'),
+                checksum=record[2].get('stringValue'),
+                blob_link=record[3].get('stringValue'),
+                mime_type=record[4].get('stringValue'),
+                embedding=None,  # Skip embedding parsing for listing
+                created_at=created_at,
+                compliance_framework_id=record[6].get('stringValue') if len(record) > 6 else None
+            ))
+        
+        return documents
+    
     def get_document_by_id(self, document_id: int) -> Optional[DocumentModel]:
         """Get a single document by ID."""
         response = self.execute_statement(
