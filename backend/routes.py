@@ -2,7 +2,7 @@ import json
 import time
 import io
 from typing import Optional
-from fastapi import APIRouter, File, UploadFile, Form
+from fastapi import APIRouter, File, UploadFile, Form, Request
 from fastapi.responses import StreamingResponse
 
 from config import settings
@@ -409,7 +409,7 @@ async def delete_document(document_id: int):
         raise DatabaseError("DELETE", "documents", e)
 
 @router.post("/resolve-citations")
-async def resolve_citations(request: CitationRequest):
+async def resolve_citations(citation_request: CitationRequest, request: Request):
     """
     Resolve citation tokens to document URLs and exact text.
     
@@ -424,12 +424,17 @@ async def resolve_citations(request: CitationRequest):
         
         logger.info(
             "Resolving citations",
-            extra_fields={"citation_count": len(request.citations)}
+            extra_fields={"citation_count": len(citation_request.citations)}
         )
         
         resolved_citations = []
         
-        for citation_ref in request.citations:
+        # Get the hostname from the request and convert backend port to frontend port
+        host = request.headers.get("host", "localhost:8000")
+        import re
+        frontend_url = re.sub(r':8000$', ':3000', f"http://{host}")
+        
+        for citation_ref in citation_request.citations:
             document_id = citation_ref["document_id"]
             segment_ordinal = citation_ref["segment_ordinal"]
             
@@ -460,7 +465,7 @@ async def resolve_citations(request: CitationRequest):
                     segment_ordinal=segment_ordinal,
                     text=segment_text,
                     document_title=document.title,
-                    document_url=f"http://localhost:3000/documents/{document_id}"
+                    document_url=f"{frontend_url}/documents/{document_id}"
                 )
                 resolved_citations.append(citation_info)
             else:

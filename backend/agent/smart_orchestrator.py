@@ -114,7 +114,7 @@ async def smart_handle_message(
             if should_escalate_from_short(short_result, signals, config):
                 logger.info("ESCALATION: SHORT->LONG triggered")
                 logger.info(f"   Reason: {short_result.debug_info}")
-                long_result = await run_long_path(query, signals, config)
+                long_result = await run_long_path(query, signals, config, document_id)
                 logger.info("FINAL ROUTE: SHORT->LONG (escalated)")
                 return long_result.answer
             else:
@@ -128,7 +128,7 @@ async def smart_handle_message(
             logger.info(f"   Signals: vec_sim={signals.avg_vec_sim:.2f}, fts_rate={signals.fts_hit_rate:.2f}, docs={signals.unique_docs}")
             
             # Execute LONG path directly
-            long_result = await run_long_path(query, signals, config)
+            long_result = await run_long_path(query, signals, config, document_id)
             logger.info("FINAL ROUTE: LONG (completed)")
             return long_result.answer
             

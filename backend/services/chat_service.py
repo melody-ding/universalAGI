@@ -187,8 +187,8 @@ Begin reasoning privately when needed, then provide the final response.
             logger.info("STREAMING: Using smart orchestrator for heavy processing")
             
             
-            # Stream the smart orchestration process with file context
-            async for event in stream_smart_orchestration(message, file_context=file_context):
+            # Stream the smart orchestration process with file context and document_id
+            async for event in stream_smart_orchestration(message, document_id=document_id, file_context=file_context):
                 # Ensure each streamed event is valid JSON
                 from agent.token_manager import ensure_json_validity
                 # Extract the JSON part after "data: "

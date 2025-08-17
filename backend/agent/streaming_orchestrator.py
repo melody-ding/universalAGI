@@ -49,8 +49,37 @@ async def stream_smart_orchestration(
                     yield event
                 return
         
+        # If document_id is provided, go directly to map-reduce
+        if document_id:
+            logger.info(f"Document ID provided ({document_id}), using direct map-reduce analysis")
+            
+            # Step 1: Start analysis
+            yield f"data: {json.dumps({'type': 'thinking_step', 'content': 'Analyzing document...', 'step': 1})}\n\n"
+            logger.info("Yielded step 1: Analyzing document...")
+            
+            from search.single_document_search import map_reduce_single_document
+            
+            # Execute map-reduce directly
+            logger.info("Starting map-reduce execution...")
+            single_doc_context = await map_reduce_single_document(query, document_id)
+            logger.info("Map-reduce execution completed")
+            
+            # Step 2: Synthesis
+            yield f"data: {json.dumps({'type': 'thinking_step', 'content': 'Synthesizing findings...', 'step': 2})}\n\n"
+            logger.info("Yielded step 2: Synthesizing findings...")
+            
+            # Return the map-reduce result directly
+            yield f"data: {json.dumps({'type': 'thinking_complete', 'content': 'Document analysis complete', 'execution_summary': {'path': 'MAP-REDUCE'}})}\n\n"
+            
+            response_data = {'type': 'response_complete', 'content': single_doc_context.context_text}
+            response_event = json.dumps(response_data)
+            yield f"data: {response_event}\n\n"
+            
+            logger.info("FINAL ROUTE: MAP-REDUCE (completed)")
+            return
+        
         # Step 1: Probe analysis for regular chat
-        yield f"data: {json.dumps({'type': 'thinking_step', 'content': 'Analyzing query patterns...', 'step': 1})}\n\n"
+        yield f"data: {json.dumps({'type': 'thinking_step', 'content': 'Analyzing question...', 'step': 1})}\n\n"
         
         signals = compute_probe_signals(query, config)
         
@@ -60,14 +89,12 @@ async def stream_smart_orchestration(
         # Step 2: Route decision
         if score >= config.router.threshold:
             path = "SHORT"
-            yield f"data: {json.dumps({'type': 'thinking_step', 'content': 'Using focused search approach...', 'step': 3})}\n\n"
             
             logger.info(f"ROUTE DECISION: SHORT path selected")
             logger.info(f"   Score: {score:.3f} >= threshold {config.router.threshold}")
             logger.info(f"   Signals: vec_sim={signals.avg_vec_sim:.2f}, fts_rate={signals.fts_hit_rate:.2f}, docs={signals.unique_docs}")
             
             # Execute SHORT path with progress streaming
-            yield f"data: {json.dumps({'type': 'thinking_step', 'content': 'Performing document search...', 'step': 4})}\n\n"
             
             # Stream the SHORT path execution with more granular steps
             async for step_event in _stream_short_path_execution(query, config, document_id):
@@ -81,16 +108,14 @@ async def stream_smart_orchestration(
                 logger.info("ESCALATION: SHORT->LONG triggered")
                 
                 # Stream LONG path execution
-                async for event in _stream_long_path_execution(query, signals, config):
+                async for event in _stream_long_path_execution(query, signals, config, document_id):
                     yield event
                     
                 logger.info("FINAL ROUTE: SHORT->LONG (escalated)")
                 return
             else:
                 yield f"data: {json.dumps({'type': 'thinking_step', 'content': 'Synthesizing answer...', 'step': 8})}\n\n"
-                
-                yield f"data: {json.dumps({'type': 'thinking_complete', 'content': 'Analysis complete', 'execution_summary': {'path': 'SHORT'}})}\n\n"
-                
+                                
                 # Ensure SHORT path response is also JSON-safe
                 validated_answer = validate_response_length(short_result.answer, config)
                 try:
@@ -135,9 +160,9 @@ async def _stream_short_path_execution(query: str, config: SmartRoutingConfig, d
         from .short_path import build_context_short_path
         
         
-        # Show what we're searching for
+        # Show what we're doing based on whether we have a document_id
         search_desc = f"Searching for: {query[:60]}..."
-        yield f"data: {json.dumps({'type': 'thinking_step', 'content': search_desc, 'step': 6})}\n\n"
+        yield f"data: {json.dumps({'type': 'thinking_step', 'content': search_desc, 'step': 2})}\n\n"
         
         # Build context (this is where the RAG tool logging happens)
         context = await build_context_short_path(query, config, document_id)
@@ -145,16 +170,13 @@ async def _stream_short_path_execution(query: str, config: SmartRoutingConfig, d
         # Report search results
         docs_found = len(context.blocks)
         segments_found = sum(len(block.snippets) for block in context.blocks)
-        result_summary = f"Found {docs_found} relevant documents"
-        
-        yield f"data: {json.dumps({'type': 'thinking_step', 'content': result_summary, 'step': 7})}\n\n"
         
     except Exception as e:
         logger.error(f"Error in SHORT path streaming: {e}")
         yield f"data: {json.dumps({'type': 'thinking_step', 'content': f'Search error: {str(e)}', 'step': 5})}\n\n"
 
 
-async def _stream_long_path_execution(query: str, signals: ProbeSignals, config: SmartRoutingConfig) -> AsyncGenerator[str, None]:
+async def _stream_long_path_execution(query: str, signals: ProbeSignals, config: SmartRoutingConfig, document_id: Optional[int] = None) -> AsyncGenerator[str, None]:
     """Stream LONG path execution with detailed progress"""
     
     try:
@@ -207,18 +229,19 @@ async def _stream_long_path_execution(query: str, signals: ProbeSignals, config:
                     break
             
             # Execute subquery with streaming
-            yield f"data: {json.dumps({'type': 'thinking_step', 'content': f'Searching for: {subquery.query[:60]}...', 'step': step_counter})}\n\n"
+            if document_id:
+                yield f"data: {json.dumps({'type': 'thinking_step', 'content': f'Analyzing document sections for: {subquery.query[:60]}...', 'step': step_counter})}\n\n"
+            else:
+                yield f"data: {json.dumps({'type': 'thinking_step', 'content': f'Searching for: {subquery.query[:60]}...', 'step': step_counter})}\n\n"
             step_counter += 1
             
-            context = await execute_subquery(subquery, config)
+            context = await execute_subquery(subquery, config, document_id)
             contexts.append(context)
             executed_subqueries.append(subquery)
             
             # Stream search results
-            result_summary = f"Found {len(context.blocks)} relevant documents"
             logger.info(f"Subquery {i+1} completed: {len(context.blocks)} docs")
             
-            yield f"data: {json.dumps({'type': 'thinking_step', 'content': result_summary, 'step': step_counter})}\n\n"
             step_counter += 1
         
         # Final synthesis

@@ -173,7 +173,7 @@ Generate subqueries to comprehensively address this question within budget const
     return [SubQuery(query=query, reasoning="Fallback to original query", priority=1)]
 
 
-async def execute_subquery(subquery: SubQuery, config: SmartRoutingConfig) -> ContextBundle:
+async def execute_subquery(subquery: SubQuery, config: SmartRoutingConfig, document_id: Optional[int] = None) -> ContextBundle:
     """
     Execute a single subquery with optimized search
     
@@ -187,7 +187,7 @@ async def execute_subquery(subquery: SubQuery, config: SmartRoutingConfig) -> Co
     logger.info(f"Executing subquery: {subquery.query[:100]}...")
     
     # Use the existing optimized search from SHORT path but with LONG path limits
-    context = await build_context_short_path(subquery.query, config)
+    context = await build_context_short_path(subquery.query, config, document_id)
     
     logger.info(f"Subquery retrieved {len(context.blocks)} docs with {sum(len(b.snippets) for b in context.blocks)} segments")
     
@@ -365,7 +365,7 @@ Provide a comprehensive, well-cited answer that synthesizes all relevant informa
         return f"I apologize, but I encountered an error while synthesizing the comprehensive answer: {str(e)}"
 
 
-async def run_long_path(query: str, signals: ProbeSignals, config: SmartRoutingConfig) -> LongPathResult:
+async def run_long_path(query: str, signals: ProbeSignals, config: SmartRoutingConfig, document_id: Optional[int] = None) -> LongPathResult:
     """
     Execute the complete LONG path with early exit conditions
     
@@ -408,7 +408,7 @@ async def run_long_path(query: str, signals: ProbeSignals, config: SmartRoutingC
                     break
             
             # Execute subquery
-            context = await execute_subquery(subquery, config)
+            context = await execute_subquery(subquery, config, document_id)
             contexts.append(context)
             executed_subqueries.append(subquery)
             

@@ -3,6 +3,9 @@ from dataclasses import dataclass
 from typing import List, Optional, Dict
 from database.postgres_client import postgres_client
 from services.embedding_service import embedding_service
+from langchain_openai import ChatOpenAI
+from langchain.schema import SystemMessage, HumanMessage
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -222,3 +225,190 @@ async def build_single_document_context(
     This function provides API compatibility with the multi-document search interface.
     """
     return await search_single_document(query, document_id, limit)
+
+def _get_all_document_segments(document_id: int) -> List[Dict]:
+    """Retrieve all segments from a document in order."""
+    sql = """
+    SELECT ds.id, ds.segment_ordinal, ds.text
+    FROM document_segments ds
+    WHERE ds.document_id = :document_id
+    ORDER BY ds.segment_ordinal
+    """
+    
+    parameters = [{'name': 'document_id', 'value': {'longValue': document_id}}]
+    response = postgres_client.execute_statement(sql, parameters)
+    
+    segments = []
+    for record in response.get('records', []):
+        segments.append({
+            'id': record[0].get('longValue'),
+            'segment_ordinal': record[1].get('longValue'),
+            'text': record[2].get('stringValue')
+        })
+    
+    return segments
+
+def _chunk_segments(segments: List[Dict], chunk_size: int = 8) -> List[List[Dict]]:
+    """Split segments into smaller chunks for map-reduce processing."""
+    chunks = []
+    for i in range(0, len(segments), chunk_size):
+        chunks.append(segments[i:i + chunk_size])
+    return chunks
+
+async def _map_extract_answers(chunk: List[Dict], query: str) -> str:
+    """Extract relevant information from a chunk of segments to answer the query."""
+    llm = ChatOpenAI(
+        model=settings.MODEL_NAME,
+        temperature=0.1,
+        openai_api_key=settings.OPENAI_API_KEY,
+        max_tokens=400
+    )
+    
+    chunk_text = "\n\n".join([f"[§{seg['segment_ordinal']}] {seg['text']}" for seg in chunk])
+    
+    system_prompt = """You are an expert document analyzer. Extract information or summaries from the given text segments that would help the user answer their question.
+
+IMPORTANT:
+- Extract any information that could be useful for answering the question
+- Include relevant facts, definitions, explanations, examples, or context
+- If no useful information is found, respond with "No useful information found"
+- Be comprehensive - include anything that might help answer the question
+- Summarize key points when segments contain relevant content"""
+    
+    user_prompt = f"""Question: {query}
+
+Text segments to analyze:
+{chunk_text}
+
+Extract any information from these segments that helps answer the question."""
+    
+    messages = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=user_prompt)
+    ]
+    
+    try:
+        response = llm.invoke(messages)
+        return response.content
+    except Exception as e:
+        logger.error(f"Map extraction failed: {e}")
+        return f"Error extracting from segments {chunk[0]['segment_ordinal']}-{chunk[-1]['segment_ordinal']}: {str(e)}"
+
+async def _reduce_answers(extracted_info: List[str], query: str, document_title: str) -> str:
+    """Synthesize extracted information into a comprehensive answer."""
+    llm = ChatOpenAI(
+        model=settings.MODEL_NAME,
+        temperature=0.2,
+        openai_api_key=settings.OPENAI_API_KEY,
+        max_tokens=800
+    )
+    
+    # Filter out empty or "no useful information" responses
+    relevant_info = [info for info in extracted_info if info.strip() and "no useful information" not in info.lower()]
+    
+    if not relevant_info:
+        return "Based on my analysis of all document segments, I could not find useful information to help answer your question."
+    
+    combined_info = "\n\n".join([f"Extract {i+1}:\n{info}" for i, info in enumerate(relevant_info)])
+    
+    system_prompt = """You are an expert analyst tasked with synthesizing extracted information into a comprehensive, well-structured answer. 
+
+REQUIREMENTS:
+- Provide a direct answer to the question using the extracted information
+- Structure the response logically and clearly
+- Synthesize information across extracts to provide the most complete answer possible
+- If information is contradictory, note the discrepancies
+- Be precise and stick to what's explicitly stated in the extracts"""
+    
+    user_prompt = f"""Question: {query}
+Document: {document_title}
+
+Extracted relevant information:
+{combined_info}
+
+Synthesize this information into a comprehensive answer to the question."""
+    
+    messages = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=user_prompt)
+    ]
+    
+    try:
+        response = llm.invoke(messages)
+        return response.content
+    except Exception as e:
+        logger.error(f"Reduce synthesis failed: {e}")
+        return f"Unable to synthesize answer: {str(e)}"
+
+async def map_reduce_single_document(
+    query: str,
+    document_id: int,
+    chunk_size: int = 8
+) -> SingleDocumentContext:
+    """
+    Use map-reduce to analyze all segments of a document and answer a specific question.
+    
+    Args:
+        query: The question to answer
+        document_id: ID of the document to analyze
+        chunk_size: Number of segments to process in each map operation
+    
+    Returns:
+        SingleDocumentContext with comprehensive answer based on entire document
+    """
+    logger.info(f"Starting map-reduce analysis of document {document_id} for query: {query[:100]}...")
+    
+    # Get document title
+    document_title = _get_document_title(document_id)
+    logger.info(f"Document title: {document_title}")
+    
+    # Retrieve all segments
+    all_segments = _get_all_document_segments(document_id)
+    logger.info(f"Retrieved {len(all_segments)} segments from document")
+    
+    if not all_segments:
+        logger.warning(f"No segments found for document {document_id}")
+        return SingleDocumentContext(
+            query=query,
+            document_id=document_id,
+            document_title=document_title,
+            context_text=f"{{{document_title}}}\nNo content found in this document.",
+            results=[]
+        )
+    
+    # Map phase: chunk segments and extract relevant information from each chunk
+    chunks = _chunk_segments(all_segments, chunk_size)
+    logger.info(f"Split segments into {len(chunks)} chunks of size {chunk_size}")
+    
+    extracted_info = []
+    for i, chunk in enumerate(chunks):
+        logger.info(f"Analyzing chunk {i+1}/{len(chunks)} (segments {chunk[0]['segment_ordinal']}-{chunk[-1]['segment_ordinal']})")
+        info = await _map_extract_answers(chunk, query)
+        extracted_info.append(info)
+    
+    # Reduce phase: synthesize extracted information into final answer
+    logger.info("Synthesizing extracted information into comprehensive answer")
+    final_answer = await _reduce_answers(extracted_info, query, document_title)
+    
+    # Format as context
+    context_text = f"{{{document_title}}}\n{final_answer}"
+    
+    # Convert to SingleDocumentResult format for compatibility
+    results = []
+    for segment in all_segments:
+        results.append(SingleDocumentResult(
+            segment_id=segment['id'],
+            segment_ordinal=segment['segment_ordinal'],
+            text=segment['text'],
+            similarity_score=1.0  # All segments processed
+        ))
+    
+    logger.info(f"Map-reduce analysis completed for document {document_id}")
+    
+    return SingleDocumentContext(
+        query=query,
+        document_id=document_id,
+        document_title=document_title,
+        context_text=context_text,
+        results=results
+    )

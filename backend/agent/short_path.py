@@ -11,7 +11,8 @@ from langchain_openai import ChatOpenAI
 from langchain.schema import SystemMessage, HumanMessage
 from config import settings
 
-from search.multi_document_search import ContextBundle
+from search.multi_document_search import ContextBundle, ContextBlock
+from search.single_document_search import map_reduce_single_document
 from database.postgres_client import postgres_client
 from services.embedding_service import embedding_service
 from .smart_routing_config import SmartRoutingConfig
@@ -166,8 +167,6 @@ def _hybrid_rerank_optimized(vector_results: list, text_results: list, alpha: fl
 
 def _group_results_optimized(results: list, config: SmartRoutingConfig) -> list:
     """Group search results by document with configurable limits"""
-    from search.multi_document_search import ContextBlock
-    
     doc_groups = {}
     
     for result in results:
@@ -208,32 +207,28 @@ async def build_context_short_path(query: str, config: SmartRoutingConfig, docum
     Returns:
         ContextBundle with retrieved information
     """
-    from search.multi_document_search import ContextBundle
-    
     logger.info(f"Building SHORT path context for: {query[:100]}...")
     
     if document_id:
-        # Use single document search for focused queries
-        logger.info(f"Using single document search for document ID: {document_id}")
-        from search.single_document_search import search_single_document
+        # Use map-reduce approach for single document queries
+        logger.info(f"Using map-reduce analysis for document ID: {document_id}")
         
-        # Use single document search with higher limit since we're only searching one doc
-        single_doc_context = await search_single_document(query, document_id, limit=config.short_per_doc * 2)
+        # Use map-reduce to analyze all segments and answer the query
+        single_doc_context = await map_reduce_single_document(query, document_id)
         
         # Convert single document context to ContextBundle format
-        from search.multi_document_search import ContextBlock
-        
         if single_doc_context.results:
-            snippets = [f"[§{result.segment_ordinal}] {result.text}" for result in single_doc_context.results]
+            # Since map-reduce processes all segments, we'll create a summary block
+            # rather than individual snippet blocks
             blocks = [ContextBlock(
                 document_id=document_id,
                 title=single_doc_context.document_title,
-                snippets=snippets
+                snippets=[f"Map-reduce analysis of {len(single_doc_context.results)} segments"]
             )]
         else:
             blocks = []
         
-        logger.info(f"Single document context: 1 doc, {len(single_doc_context.results)} segments")
+        logger.info(f"Map-reduce analysis: 1 doc, {len(single_doc_context.results)} segments processed")
         
         return ContextBundle(
             query=query,
