@@ -74,9 +74,6 @@ export function CitationFootnotes({ citations }: CitationFootnotesProps) {
                       <span className="font-medium text-gray-900">
                         {(citation as any).documentTitle || (citation as any).document_title || 'Unknown Document'}
                       </span>
-                      <span className="text-gray-500">
-                        (§{(citation as any).segmentOrdinal ?? (citation as any).segment_ordinal ?? '?'})
-                      </span>
                     </span>
                   </CardTitle>
                   <div className="flex items-center gap-1">
