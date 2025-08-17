@@ -124,6 +124,18 @@ nginx -t
 # Reload nginx
 systemctl reload nginx
 
+# Create SSM environment fetcher script
+cat > /opt/universalagi/fetch-env.sh << 'EOF'
+#!/bin/bash
+# Fetch environment variables from AWS SSM Parameter Store
+ENVIRONMENT=${1:-production}
+REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region)
+/opt/universalagi/backend/deploy/fetch-ssm-env.sh $ENVIRONMENT $REGION /opt/universalagi/.env
+EOF
+
+chmod +x /opt/universalagi/fetch-env.sh
+chown ec2-user:ec2-user /opt/universalagi/fetch-env.sh
+
 # Create environment file template (will be populated by deployment script)
 cat > /opt/universalagi/.env.template << EOF
 # This file will be populated during deployment
@@ -168,11 +180,16 @@ echo "Installing Python dependencies..."
 cd backend
 pip3 install --user -r requirements.txt
 
-# Copy environment file if it doesn't exist
-if [ ! -f "/opt/universalagi/.env" ]; then
-    echo "Creating environment file from template..."
-    cp /opt/universalagi/.env.template /opt/universalagi/.env
-    echo "Please edit /opt/universalagi/.env with your configuration"
+# Fetch environment variables from SSM Parameter Store
+echo "Fetching environment variables from AWS SSM Parameter Store..."
+if /opt/universalagi/fetch-env.sh production; then
+    echo "✅ Environment variables fetched successfully from SSM"
+else
+    echo "⚠️  Failed to fetch from SSM, using template..."
+    if [ ! -f "/opt/universalagi/.env" ]; then
+        cp /opt/universalagi/.env.template /opt/universalagi/.env
+        echo "Please edit /opt/universalagi/.env with your configuration"
+    fi
 fi
 
 # Restart the service

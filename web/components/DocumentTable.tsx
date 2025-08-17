@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileText, Download, Eye, Trash2, Shield } from "lucide-react";
+import { FileText, Eye, Trash2, Shield } from "lucide-react";
 import { complianceGroupsAPI, type ComplianceGroup } from "@/lib/api/compliance-groups";
 
 interface UploadedDocument {
@@ -19,7 +19,6 @@ interface UploadedDocument {
 interface DocumentTableProps {
   documents: UploadedDocument[];
   onView?: (document: UploadedDocument) => void;
-  onDownload?: (document: UploadedDocument) => void;
   onDelete?: (document: UploadedDocument) => void;
   onComplianceFrameworkUpdate?: (documentId: number, complianceFrameworkId: string | null) => void;
   className?: string;
@@ -28,7 +27,6 @@ interface DocumentTableProps {
 export function DocumentTable({ 
   documents, 
   onView, 
-  onDownload, 
   onDelete,
   onComplianceFrameworkUpdate,
   className = "" 
@@ -163,14 +161,6 @@ export function DocumentTable({
                           className="p-1"
                         >
                           <Eye className="w-3 h-3" />
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => onDownload?.(doc)}
-                          className="p-1"
-                        >
-                          <Download className="w-3 h-3" />
                         </Button>
                         <Button 
                           variant="outline" 

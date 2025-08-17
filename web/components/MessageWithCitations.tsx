@@ -156,10 +156,7 @@ export function MessageWithCitations({ content, className = "", messageId }: Mes
 
     return (
       <div className="citation-container">
-        <div 
-          className="prose prose-sm max-w-none"
-          dangerouslySetInnerHTML={{ __html: processedContent }}
-        />
+        <MarkdownMessage content={processedContent} />
       </div>
     );
   };

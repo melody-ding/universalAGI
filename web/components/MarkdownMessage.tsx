@@ -2,6 +2,7 @@
 
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
 
 interface MarkdownMessageProps {
   content: string;
@@ -10,9 +11,10 @@ interface MarkdownMessageProps {
 
 export function MarkdownMessage({ content, className = "" }: MarkdownMessageProps) {
   return (
-    <div className={`prose prose-sm max-w-none ${className}`}>
+    <div className={`max-w-none ${className}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeRaw]}
         components={{
           h1: ({ children }) => <h1 className="text-xl font-bold mb-2 text-current">{children}</h1>,
           h2: ({ children }) => <h2 className="text-lg font-semibold mb-2 text-current">{children}</h2>,

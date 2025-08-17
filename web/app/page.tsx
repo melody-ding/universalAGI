@@ -10,7 +10,7 @@ export default function Home() {
         <div className="max-w-4xl mx-auto px-6">
           <div className="text-center mb-12">
             <h1 className="text-4xl font-bold text-gray-900 mb-4">
-              Welcome to Universal AGI
+              Welcome to Amazon Product Guardian
             </h1>
             <p className="text-xl text-gray-600 mb-8">
               Your intelligent assistant for chat and document management

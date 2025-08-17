@@ -9,7 +9,7 @@ const navigation = [
   { name: "Home", href: "/", icon: Home },
   { name: "AI Corpus Chat", href: "/chat", icon: MessageSquare },
   { name: "Compliance Documents", href: "/documents", icon: FileText },
-  { name: "Rules", href: "/compliance-groups", icon: Shield },
+  { name: "Compliance Groups", href: "/compliance-groups", icon: Shield },
 ];
 
 export function SideMenu() {

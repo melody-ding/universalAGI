@@ -1,6 +1,6 @@
 # Dependency Injection Implementation
 
-This document describes the dependency injection system implemented to improve the architectural soundness of the AI agent.
+This document describes the dependency injection system implemented to improve the modularity of the AI agent.
 
 ## Overview
 

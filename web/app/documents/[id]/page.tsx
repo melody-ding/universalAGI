@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Download, FileText, Calendar, ChevronLeft } from "lucide-react";
+import { ArrowLeft, FileText, Calendar, ChevronLeft } from "lucide-react";
 import { apiEndpoints } from "@/lib/api";
 import { DocumentChatPanel } from "@/components/DocumentChatPanel";
 
@@ -151,11 +151,6 @@ export default function DocumentDetailPage() {
     }
   };
 
-  const handleDownload = () => {
-    if (document?.blob_link) {
-      window.open(document.blob_link, '_blank');
-    }
-  };
 
   const handleViewInNewTab = () => {
     if (viewerUrl) {
@@ -289,10 +284,6 @@ export default function DocumentDetailPage() {
                 <Button onClick={handleViewInNewTab} variant="outline">
                   View in New Tab
                 </Button>
-                <Button onClick={handleDownload} variant="outline">
-                  <Download className="w-4 h-4 mr-2" />
-                  Download
-                </Button>
               </div>
             </div>
           </div>
@@ -389,10 +380,6 @@ export default function DocumentDetailPage() {
               </div>
             </div>
           </div>
-          <Button onClick={handleDownload} className="flex items-center space-x-2">
-            <Download className="w-4 h-4" />
-            <span>Download</span>
-          </Button>
         </div>
       </div>
 
@@ -471,10 +458,6 @@ export default function DocumentDetailPage() {
                       <p className="text-gray-600 mb-2">
                         {viewerError || 'Unable to preview this document'}
                       </p>
-                      <Button onClick={handleDownload} variant="outline">
-                        <Download className="w-4 h-4 mr-2" />
-                        Download to view
-                      </Button>
                     </div>
                   </div>
                 ) : (
@@ -492,14 +475,10 @@ export default function DocumentDetailPage() {
                         <div className="text-center">
                           <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                           <p className="text-gray-600 mb-2">Unable to preview this document</p>
-                          <p className="text-xs text-gray-500 mb-4">Try downloading or viewing in a new tab</p>
+                          <p className="text-xs text-gray-500 mb-4">Try viewing in a new tab</p>
                           <div className="space-x-2">
                             <Button onClick={handleViewInNewTab} variant="outline">
                               View in New Tab
-                            </Button>
-                            <Button onClick={handleDownload} variant="outline">
-                              <Download className="w-4 h-4 mr-2" />
-                              Download
                             </Button>
                           </div>
                         </div>
@@ -524,10 +503,6 @@ export default function DocumentDetailPage() {
                       Refresh Preview
                     </Button>
                   )}
-                  <Button onClick={handleDownload} variant="outline" size="sm">
-                    <Download className="w-4 h-4 mr-2" />
-                    Download Original
-                  </Button>
                 </div>
               </div>
             </CardContent>

@@ -133,10 +133,10 @@ class EscalationConfig:
     @classmethod
     def default(cls) -> "EscalationConfig":
         return cls(
-            min_strong_segments=int(os.getenv("ESCALATION_MIN_STRONG_SEGMENTS", "2")),
-            max_distinct_docs=int(os.getenv("ESCALATION_MAX_DISTINCT_DOCS", "4")),
-            min_avg_vec_sim=float(os.getenv("ESCALATION_MIN_AVG_VEC_SIM", "0.60")),
-            min_fts_hit_rate=float(os.getenv("ESCALATION_MIN_FTS_HIT_RATE", "0.10"))
+            min_strong_segments=int(os.getenv("ESCALATION_MIN_STRONG_SEGMENTS", "1")),
+            max_distinct_docs=int(os.getenv("ESCALATION_MAX_DISTINCT_DOCS", "8")),
+            min_avg_vec_sim=float(os.getenv("ESCALATION_MIN_AVG_VEC_SIM", "0.40")),
+            min_fts_hit_rate=float(os.getenv("ESCALATION_MIN_FTS_HIT_RATE", "0.05"))
         )
 
 

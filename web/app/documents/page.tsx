@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { DocumentUpload } from "@/components/DocumentUpload";
 import { DocumentTable } from "@/components/DocumentTable";
-import { CitationTest } from "@/components/CitationTest";
+import { API_BASE_URL } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { apiEndpoints } from "@/lib/api";
 
@@ -22,7 +22,6 @@ interface UploadedDocument {
 export default function DocumentsPage() {
   const [uploadedDocuments, setUploadedDocuments] = useState<UploadedDocument[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [showCitationTest, setShowCitationTest] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -66,9 +65,6 @@ export default function DocumentsPage() {
     router.push(`/documents/${document.id}`);
   };
 
-  const handleDownload = (document: UploadedDocument) => {
-    window.open(document.blob_link, '_blank');
-  };
 
   const handleDelete = async (document: UploadedDocument) => {
     if (!confirm(`Are you sure you want to delete "${document.title}"? This action cannot be undone.`)) {
@@ -93,7 +89,6 @@ export default function DocumentsPage() {
 
   const handleComplianceFrameworkUpdate = async (documentId: number, complianceFrameworkId: string | null) => {
     try {
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
       const response = await fetch(`${API_BASE_URL}/documents/${documentId}/compliance-framework`, {
         method: 'PUT',
         headers: {
@@ -126,19 +121,7 @@ export default function DocumentsPage() {
             <h1 className="text-2xl font-bold text-gray-900">Documents</h1>
             <p className="text-gray-600 mt-1">Upload and manage your documents</p>
           </div>
-          <Button 
-            onClick={() => setShowCitationTest(!showCitationTest)}
-            variant="outline"
-            className="ml-4"
-          >
-            {showCitationTest ? 'Hide Citation Test' : 'Test Citations'}
-          </Button>
         </div>
-        {showCitationTest && (
-          <div className="mt-6">
-            <CitationTest />
-          </div>
-        )}
       </div>
 
       <div className="flex-1 overflow-hidden">
@@ -159,7 +142,6 @@ export default function DocumentsPage() {
               <DocumentTable 
                 documents={uploadedDocuments}
                 onView={handleView}
-                onDownload={handleDownload}
                 onDelete={handleDelete}
                 onComplianceFrameworkUpdate={handleComplianceFrameworkUpdate}
               />

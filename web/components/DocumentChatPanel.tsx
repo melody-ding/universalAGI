@@ -7,6 +7,7 @@ import { ChatInput } from "@/components/ChatInput";
 import { MessageList } from "@/components/MessageList";
 import { MessageWithCitations } from "@/components/MessageWithCitations";
 import { ThinkingSteps } from "@/components/ThinkingSteps";
+import { apiEndpoints } from "@/lib/api";
 
 // Reuse the same interfaces as the main chat for consistency
 interface ThinkingStep {
@@ -75,7 +76,7 @@ export function DocumentChatPanel({ isOpen, onClose, documentId, documentTitle }
       formData.append('message', messageText);
       formData.append('document_id', documentId.toString());
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/send-message-stream`, {
+      const response = await fetch(apiEndpoints.sendMessage, {
         method: 'POST',
         body: formData,
       });

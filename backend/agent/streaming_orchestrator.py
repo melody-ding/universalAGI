@@ -80,8 +80,6 @@ async def stream_smart_orchestration(
             if _should_escalate_from_short(short_result, signals, config):
                 logger.info("ESCALATION: SHORT->LONG triggered")
                 
-                yield f"data: {json.dumps({'type': 'thinking_step', 'content': 'Escalating to detailed analysis...', 'step': 8})}\n\n"
-                
                 # Stream LONG path execution
                 async for event in _stream_long_path_execution(query, signals, config):
                     yield event
@@ -136,7 +134,6 @@ async def _stream_short_path_execution(query: str, config: SmartRoutingConfig, d
         # Import here to avoid circular imports
         from .short_path import build_context_short_path
         
-        yield f"data: {json.dumps({'type': 'thinking_step', 'content': 'Preparing search...', 'step': 5})}\n\n"
         
         # Show what we're searching for
         search_desc = f"Searching for: {query[:60]}..."

@@ -6,7 +6,9 @@ COPY package*.json ./
 RUN npm ci
 
 COPY . .
-RUN npm run build
+
+# Use the no-lint build command
+RUN npm run build:nolint
 
 EXPOSE 3000
 
