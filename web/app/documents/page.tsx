@@ -16,6 +16,7 @@ interface UploadedDocument {
   blob_link: string;
   created_at: string;
   mime_type?: string;
+  compliance_framework_id?: string;
 }
 
 export default function DocumentsPage() {
@@ -90,6 +91,33 @@ export default function DocumentsPage() {
     }
   };
 
+  const handleComplianceFrameworkUpdate = async (documentId: number, complianceFrameworkId: string | null) => {
+    try {
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${API_BASE_URL}/documents/${documentId}/compliance-framework`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          compliance_framework_id: complianceFrameworkId,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || errorData.message || 'Failed to update compliance framework');
+      }
+
+      // Refresh the documents list to show the updated compliance framework
+      await fetchUploadedDocuments();
+    } catch (error) {
+      console.error('Error updating compliance framework:', error);
+      alert('Failed to update compliance framework. Please try again.');
+      throw error; // Re-throw to handle in the DocumentTable component
+    }
+  };
+
   return (
     <div className="flex flex-col h-full">
       <div className="p-6 border-b">
@@ -133,6 +161,7 @@ export default function DocumentsPage() {
                 onView={handleView}
                 onDownload={handleDownload}
                 onDelete={handleDelete}
+                onComplianceFrameworkUpdate={handleComplianceFrameworkUpdate}
               />
             </div>
           </ScrollArea>

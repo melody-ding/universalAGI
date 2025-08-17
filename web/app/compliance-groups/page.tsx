@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,6 +10,7 @@ import { Plus, Shield, Calendar, AlertCircle, Trash2 } from "lucide-react";
 import { complianceGroupsAPI, type ComplianceGroup, type CreateComplianceGroupRequest } from "@/lib/api/compliance-groups";
 
 export default function ComplianceGroupsPage() {
+  const router = useRouter();
   const [groups, setGroups] = useState<ComplianceGroup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
@@ -294,10 +296,11 @@ export default function ComplianceGroupsPage() {
                         </div>
                       </div>
                       <div className="flex space-x-2 ml-4">
-                        <Button variant="outline" size="sm">
-                          Edit
-                        </Button>
-                        <Button variant="outline" size="sm">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => router.push(`/compliance-groups/${group.id}`)}
+                        >
                           View Details
                         </Button>
                         <Button 

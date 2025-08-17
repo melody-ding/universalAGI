@@ -252,7 +252,7 @@ class PostgresClient:
     def get_all_documents(self) -> List[DocumentModel]:
         """Get all documents from the database."""
         response = self.execute_statement(
-            "SELECT id, title, checksum, blob_link, mime_type, created_at FROM documents ORDER BY created_at DESC"
+            "SELECT id, title, checksum, blob_link, mime_type, created_at, compliance_framework_id FROM documents ORDER BY created_at DESC"
         )
         
         documents = []
@@ -273,7 +273,8 @@ class PostgresClient:
                 blob_link=record[3].get('stringValue'),
                 mime_type=record[4].get('stringValue'),
                 embedding=None,  # Skip embedding parsing for listing
-                created_at=created_at
+                created_at=created_at,
+                compliance_framework_id=record[6].get('stringValue') if len(record) > 6 else None
             ))
         
         return documents
@@ -281,7 +282,7 @@ class PostgresClient:
     def get_document_by_id(self, document_id: int) -> Optional[DocumentModel]:
         """Get a single document by ID."""
         response = self.execute_statement(
-            "SELECT id, title, checksum, blob_link, mime_type, created_at FROM documents WHERE id = :document_id",
+            "SELECT id, title, checksum, blob_link, mime_type, created_at, compliance_framework_id FROM documents WHERE id = :document_id",
             [{'name': 'document_id', 'value': {'longValue': document_id}}]
         )
         
@@ -306,7 +307,8 @@ class PostgresClient:
             blob_link=record[3].get('stringValue'),
             mime_type=record[4].get('stringValue'),
             embedding=None,  # Skip embedding parsing for single document
-            created_at=created_at
+            created_at=created_at,
+            compliance_framework_id=record[6].get('stringValue') if len(record) > 6 else None
         )
     
     def get_all_compliance_groups(self) -> List[ComplianceGroupModel]:
@@ -450,6 +452,46 @@ class PostgresClient:
         )
         
         logger.info(f"Deleted compliance group {group_id}")
+        return response.get('numberOfRecordsUpdated', 0) > 0
+    
+    def update_document_compliance_framework(self, document_id: int, compliance_framework_id: Optional[str]) -> bool:
+        """Update a document's compliance framework assignment. Returns True if updated successfully."""
+        parameters = [
+            {'name': 'document_id', 'value': {'longValue': document_id}},
+            {'name': 'compliance_framework_id', 'value': {'stringValue': compliance_framework_id} if compliance_framework_id else {'isNull': True}}
+        ]
+        
+        # Delete any existing rules for this document when compliance framework changes
+        # This ensures rules are cleaned up whether setting to null or changing to a different framework
+        logger.info(f"Updating document {document_id} compliance framework - deleting associated rules")
+        try:
+            rules_deleted = self.execute_statement(
+                "DELETE FROM compliance_rules WHERE document_id = :document_id",
+                [{'name': 'document_id', 'value': {'longValue': document_id}}]
+            )
+            deleted_count = rules_deleted.get('numberOfRecordsUpdated', 0)
+            if deleted_count > 0:
+                logger.info(f"Deleted {deleted_count} compliance rules for document {document_id}")
+            else:
+                logger.info(f"No existing compliance rules found for document {document_id}")
+        except Exception as e:
+            logger.warning(f"Failed to delete compliance rules for document {document_id}: {str(e)}")
+            # Continue with the update even if rule deletion fails
+        
+        # Update the document's compliance framework
+        if compliance_framework_id is None:
+            # Handle null case separately to avoid casting null to uuid
+            response = self.execute_statement(
+                "UPDATE documents SET compliance_framework_id = NULL WHERE id = :document_id",
+                [{'name': 'document_id', 'value': {'longValue': document_id}}]
+            )
+        else:
+            response = self.execute_statement(
+                "UPDATE documents SET compliance_framework_id = :compliance_framework_id::uuid WHERE id = :document_id",
+                parameters
+            )
+        
+        logger.info(f"Updated document {document_id} compliance framework to {compliance_framework_id}")
         return response.get('numberOfRecordsUpdated', 0) > 0
 
 postgres_client = PostgresClient()

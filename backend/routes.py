@@ -1,11 +1,13 @@
 import json
 import time
+from typing import Optional
 from fastapi import APIRouter, File, UploadFile, Form
 from fastapi.responses import StreamingResponse
 
 from config import settings
 from models import SendMessageResponse, Message, CitationRequest, CitationResponse, CitationInfo
 from database.models import ComplianceGroupCreateRequest, ComplianceGroupUpdateRequest
+from pydantic import BaseModel
 from services import chat_service
 from utils.logging_config import get_logger, log_request
 from utils.error_handler import (
@@ -18,6 +20,9 @@ from utils.exceptions import (
 )
 
 router = APIRouter()
+
+class DocumentComplianceFrameworkUpdateRequest(BaseModel):
+    compliance_framework_id: Optional[str] = None
 
 @router.get("/")
 async def root():
@@ -186,7 +191,8 @@ async def get_documents():
                     "checksum": doc.checksum,
                     "blob_link": doc.blob_link,
                     "created_at": doc.created_at.isoformat() if doc.created_at else None,
-                    "mime_type": doc.mime_type
+                    "mime_type": doc.mime_type,
+                    "compliance_framework_id": doc.compliance_framework_id
                 }
                 for doc in documents
             ]
@@ -236,7 +242,8 @@ async def get_document(document_id: int):
             "blob_link": document.blob_link,
             "created_at": document.created_at.isoformat() if document.created_at else None,
             "num_segments": segment_count,
-            "mime_type": document.mime_type
+            "mime_type": document.mime_type,
+            "compliance_framework_id": document.compliance_framework_id
         }
         
         logger.info(
@@ -689,3 +696,85 @@ async def delete_compliance_group(group_id: str):
             exc_info=True
         )
         raise DatabaseError("DELETE", "compliance_frameworks", e)
+
+@router.put("/documents/{document_id}/compliance-framework")
+async def update_document_compliance_framework(
+    document_id: int, 
+    request: DocumentComplianceFrameworkUpdateRequest
+):
+    """Update a document's compliance framework assignment."""
+    start_time = time.time()
+    logger = get_logger(__name__)
+    
+    try:
+        from database.postgres_client import postgres_client
+        
+        # Check if document exists
+        document = postgres_client.get_document_by_id(document_id)
+        if not document:
+            raise ResourceNotFoundError("Document", str(document_id))
+        
+        # If compliance_framework_id is provided, check if it exists
+        if request.compliance_framework_id:
+            compliance_group = postgres_client.get_compliance_group_by_id(request.compliance_framework_id)
+            if not compliance_group:
+                raise ResourceNotFoundError("Compliance Group", request.compliance_framework_id)
+        
+        # Update the document's compliance framework
+        updated = postgres_client.update_document_compliance_framework(
+            document_id=document_id,
+            compliance_framework_id=request.compliance_framework_id
+        )
+        
+        if not updated:
+            raise ProcessingError("document_compliance_update", "database_operation", "Failed to update document compliance framework")
+        
+        # Trigger rule extraction if compliance framework was assigned (not removed)
+        extraction_result = None
+        if request.compliance_framework_id:
+            from document_ingestion.trigger import extract_rules_for_framework_trigger
+            logger.info(f"Triggering rule extraction for framework {request.compliance_framework_id}")
+            extraction_result = extract_rules_for_framework_trigger(request.compliance_framework_id)
+            logger.info(f"Rule extraction completed: {extraction_result.get('rules_extracted', 0)} rules extracted")
+        
+        # Fetch updated document to return full details
+        updated_document = postgres_client.get_document_by_id(document_id)
+        
+        response_data = {
+            "id": updated_document.id,
+            "title": updated_document.title,
+            "compliance_framework_id": updated_document.compliance_framework_id,
+            "status": "success"
+        }
+        
+        # Include rule extraction results if applicable
+        if extraction_result:
+            response_data["rule_extraction"] = {
+                "success": extraction_result.get("success", False),
+                "rules_extracted": extraction_result.get("rules_extracted", 0),
+                "error": extraction_result.get("error")
+            }
+        
+        logger.info(
+            "Document compliance framework updated successfully",
+            extra_fields={"document_id": document_id, "compliance_framework_id": request.compliance_framework_id}
+        )
+        
+        # Log successful request
+        duration = time.time() - start_time
+        log_request(logger, "PUT", f"/documents/{document_id}/compliance-framework", 200, duration)
+        
+        return response_data
+        
+    except (ValidationError, ResourceNotFoundError):
+        # Re-raise user-facing errors
+        raise
+    except Exception as e:
+        # Log and re-raise unexpected errors
+        duration = time.time() - start_time
+        logger.error(
+            f"Error updating document compliance framework: {str(e)}",
+            extra_fields={"duration": duration, "document_id": document_id},
+            exc_info=True
+        )
+        raise DatabaseError("UPDATE", "documents", e)

@@ -19,7 +19,7 @@ interface Message {
 
 export function useStreamingChat() {
   const [messages, setMessages] = useState<Message[]>([
-    { id: 1, text: "Hello! How can I help you today?", sender: "bot" },
+    { id: 1, text: "Hello! Ask me questions about documents that you have uploaded.", sender: "bot" },
   ]);
   const [isProcessing, setIsProcessing] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);

@@ -10,6 +10,7 @@ class DocumentModel(BaseModel):
     mime_type: Optional[str] = None
     embedding: Optional[List[float]] = None
     created_at: Optional[datetime] = None
+    compliance_framework_id: Optional[str] = None  # UUID as string
 
 class DocumentSegmentModel(BaseModel):
     id: Optional[int] = None
